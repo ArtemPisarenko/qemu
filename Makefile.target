@@ -96,6 +96,7 @@ all: $(PROGS) stap
 
 #########################################################
 # cpu emulator library
+obj-y += external_sim.o
 obj-y += exec.o
 obj-y += accel/
 obj-$(CONFIG_TCG) += tcg/tcg.o tcg/tcg-op.o tcg/tcg-op-vec.o tcg/tcg-op-gvec.o

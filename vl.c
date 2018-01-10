@@ -131,6 +131,8 @@ int main(int argc, char **argv)
 #include "qapi/qmp/qerror.h"
 #include "sysemu/iothread.h"
 
+#include "external_sim.h"
+
 #define MAX_VIRTIO_CONSOLES 1
 
 static const char *data_dir[16];
@@ -246,6 +248,20 @@ static struct {
     { .driver = "vmware-svga",          .flag = &default_vga       },
     { .driver = "qxl-vga",              .flag = &default_vga       },
     { .driver = "virtio-vga",           .flag = &default_vga       },
+};
+
+static QemuOptsList qemu_external_sim_opts = {
+    .name = "external_sim",
+    .implied_opt_name = "",
+    .merge_lists = true,
+    .head = QTAILQ_HEAD_INITIALIZER(qemu_external_sim_opts.head),
+    .desc = {
+        {
+            .name = "sock",
+            .type = QEMU_OPT_NUMBER,
+        },
+        { /* end of list */ }
+    },
 };
 
 static QemuOptsList qemu_rtc_opts = {
@@ -2990,7 +3006,7 @@ int main(int argc, char **argv, char **envp)
     const char *boot_once = NULL;
     DisplayState *ds;
     QemuOpts *opts, *machine_opts;
-    QemuOpts *icount_opts = NULL, *accel_opts = NULL;
+    QemuOpts *icount_opts = NULL, *accel_opts = NULL, *external_sim_opts = NULL;
     QemuOptsList *olist;
     int optind;
     const char *optarg;
@@ -3035,6 +3051,7 @@ int main(int argc, char **argv, char **envp)
 
     module_call_init(MODULE_INIT_QOM);
 
+    qemu_add_opts(&qemu_external_sim_opts);
     qemu_add_opts(&qemu_drive_opts);
     qemu_add_drive_opts(&qemu_legacy_drive_opts);
     qemu_add_drive_opts(&qemu_common_drive_opts);
@@ -3817,6 +3834,14 @@ int main(int argc, char **argv, char **envp)
                     exit(1);
                 }
                 break;
+            case QEMU_OPTION_external_sim:
+                external_sim_opts =
+                    qemu_opts_parse_noisily(
+                        qemu_find_opts("external_sim"),optarg,true);
+                if (!external_sim_opts) {
+                    exit(1);
+                }
+                break;
             case QEMU_OPTION_incoming:
                 if (!incoming) {
                     runstate_set(RUN_STATE_INMIGRATE);
@@ -4410,6 +4435,16 @@ int main(int argc, char **argv, char **envp)
     /* spice needs the timers to be initialized by this point */
     qemu_spice_init();
 
+    if (external_sim_opts) {
+        if (!(rtc_clock == QEMU_CLOCK_VIRTUAL && (
+              (icount_opts && !qemu_opt_get_bool(icount_opts, "sleep", true)) ||
+              kvm_enabled()))) {
+            error_report("-external_sim requires -rtc clock=vm and either "
+                "icount -1,sleep=off or -enable-kvm");
+            exit(1);
+        }
+        setup_external_sim(external_sim_opts);
+    }
     cpu_ticks_init();
     if (icount_opts) {
         if (!tcg_enabled()) {
