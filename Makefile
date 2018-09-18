@@ -867,6 +867,8 @@ endif
 	for d in $(TARGET_DIRS); do \
 	$(MAKE) $(SUBDIR_MAKEFLAGS) TARGET_DIR=$$d/ -C $$d $@ || exit 1 ; \
         done
+	$(INSTALL_DIR) "$(DESTDIR)$(bindir)"
+	$(INSTALL_PROG) $(SRC_PATH)/scripts/qemu-debug-stub.pl "$(DESTDIR)$(bindir)"
 
 .PHONY: ctags
 ctags:

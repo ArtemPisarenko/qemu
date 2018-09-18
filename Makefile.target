@@ -11,9 +11,9 @@ $(call set-vpath, $(SRC_PATH):$(BUILD_DIR))
 ifdef CONFIG_LINUX
 QEMU_CFLAGS += -I../linux-headers
 endif
-QEMU_CFLAGS += -iquote .. -iquote $(SRC_PATH)/target/$(TARGET_BASE_ARCH) -DNEED_CPU_H
+QEMU_CFLAGS += -$(CC_IQUOTE) .. -$(CC_IQUOTE) $(SRC_PATH)/target/$(TARGET_BASE_ARCH) -DNEED_CPU_H
 
-QEMU_CFLAGS+=-iquote $(SRC_PATH)/include
+QEMU_CFLAGS+=-$(CC_IQUOTE) $(SRC_PATH)/include
 
 ifdef CONFIG_USER_ONLY
 # user emulator name
@@ -151,6 +151,9 @@ endif
 GENERATED_FILES += hmp-commands.h hmp-commands-info.h
 
 endif # CONFIG_SOFTMMU
+
+print-%:
+	@echo '$*=$($*)'
 
 # Workaround for http://gcc.gnu.org/PR55489, see configure.
 %/translate.o: QEMU_CFLAGS += $(TRANSLATE_OPT_CFLAGS)
