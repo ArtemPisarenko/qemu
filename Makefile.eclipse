@@ -1,0 +1,10 @@
+# Supporting Makefile for Eclipse IDE development.
+
+SRC_PATH=.
+-include config-host.mak
+
+.PHONY: fix_ws_import_bug
+fix_ws_import_bug:
+	@echo "Overwriting some C/C++ project settings (\"Preprocessor Include Paths, Macros etc.\" and maybe others) to generated state"
+	@cp -f $(SRC_PATH)/.eclipse-project-template/.settings/language.settings.xml $(SRC_PATH)/.settings/
+

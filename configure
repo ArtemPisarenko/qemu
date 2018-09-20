@@ -271,6 +271,7 @@ ld_has() {
 
 # default parameters
 source_path=$(dirname "$0")
+generate_eclipse_project="no"
 cpu=""
 iasl="iasl"
 interp_prefix="/usr/gnemul/qemu-%M"
@@ -534,7 +535,7 @@ QEMU_CFLAGS="-fno-strict-aliasing -fno-common -fwrapv $QEMU_CFLAGS"
 QEMU_CFLAGS="-Wall -Wundef -Wwrite-strings -Wmissing-prototypes $QEMU_CFLAGS"
 QEMU_CFLAGS="-Wstrict-prototypes -Wredundant-decls $QEMU_CFLAGS"
 QEMU_CFLAGS="-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE $QEMU_CFLAGS"
-QEMU_INCLUDES="-iquote . -iquote \$(SRC_PATH) -iquote \$(SRC_PATH)/accel/tcg -iquote \$(SRC_PATH)/include"
+QEMU_INCLUDES="-\$(CC_IQUOTE) . -\$(CC_IQUOTE) \$(SRC_PATH) -\$(CC_IQUOTE) \$(SRC_PATH)/accel/tcg -\$(CC_IQUOTE) \$(SRC_PATH)/include"
 if test "$debug_info" = "yes"; then
     CFLAGS="-g $CFLAGS"
     LDFLAGS="-g $LDFLAGS"
@@ -878,6 +879,8 @@ for opt do
   --interp-prefix=*) interp_prefix="$optarg"
   ;;
   --source-path=*)
+  ;;
+  --generate-eclipse-project) generate_eclipse_project="yes"
   ;;
   --cross-prefix=*)
   ;;
@@ -1483,6 +1486,10 @@ $(echo Available targets: $default_target_list | \
 
 Advanced options (experts only):
   --source-path=PATH       path of source code [$source_path]
+  --generate-eclipse-project
+                           generate eclipse cdt project in source tree root
+                           (makefile project with existing code, default build cinfiguration,
+                           debug launch configurations for targets)
   --cross-prefix=PREFIX    use PREFIX for compile tools [$cross_prefix]
   --cc=CC                  use C compiler CC [$cc]
   --iasl=IASL              use ACPI compiler IASL [$iasl]
@@ -5717,6 +5724,13 @@ echo_version() {
 QEMU_CFLAGS="$pixman_cflags $fdt_cflags $QEMU_CFLAGS"
 libs_softmmu="$pixman_libs $libs_softmmu"
 
+# verify option to generate eclipse project
+if test "$generate_eclipse_project" = "yes" ; then
+  if test -e "$source_path/.project"; then
+    generate_eclipse_project="skipped (already exists)"
+  fi
+fi
+
 echo "Install prefix    $prefix"
 echo "BIOS directory    $(eval echo $qemu_datadir)"
 echo "firmware path     $(eval echo $firmwarepath)"
@@ -5735,6 +5749,7 @@ echo "local state directory   queried at runtime"
 echo "Windows SDK       $win_sdk"
 fi
 echo "Source path       $source_path"
+echo "Generate eclipse project $generate_eclipse_project"
 echo "GIT binary        $git"
 echo "GIT submodules    $git_submodules"
 echo "C compiler        $cc"
@@ -6619,19 +6634,19 @@ if test "$vxhs" = "yes" ; then
 fi
 
 if test "$tcg_interpreter" = "yes"; then
-  QEMU_INCLUDES="-iquote \$(SRC_PATH)/tcg/tci $QEMU_INCLUDES"
+  QEMU_INCLUDES="-\$(CC_IQUOTE) \$(SRC_PATH)/tcg/tci $QEMU_INCLUDES"
 elif test "$ARCH" = "sparc64" ; then
-  QEMU_INCLUDES="-iquote \$(SRC_PATH)/tcg/sparc $QEMU_INCLUDES"
+  QEMU_INCLUDES="-\$(CC_IQUOTE) \$(SRC_PATH)/tcg/sparc $QEMU_INCLUDES"
 elif test "$ARCH" = "s390x" ; then
-  QEMU_INCLUDES="-iquote \$(SRC_PATH)/tcg/s390 $QEMU_INCLUDES"
+  QEMU_INCLUDES="-\$(CC_IQUOTE) \$(SRC_PATH)/tcg/s390 $QEMU_INCLUDES"
 elif test "$ARCH" = "x86_64" -o "$ARCH" = "x32" ; then
-  QEMU_INCLUDES="-iquote \$(SRC_PATH)/tcg/i386 $QEMU_INCLUDES"
+  QEMU_INCLUDES="-\$(CC_IQUOTE) \$(SRC_PATH)/tcg/i386 $QEMU_INCLUDES"
 elif test "$ARCH" = "ppc64" ; then
-  QEMU_INCLUDES="-iquote \$(SRC_PATH)/tcg/ppc $QEMU_INCLUDES"
+  QEMU_INCLUDES="-\$(CC_IQUOTE) \$(SRC_PATH)/tcg/ppc $QEMU_INCLUDES"
 else
-  QEMU_INCLUDES="-iquote \$(SRC_PATH)/tcg/\$(ARCH) $QEMU_INCLUDES"
+  QEMU_INCLUDES="-\$(CC_IQUOTE) \$(SRC_PATH)/tcg/\$(ARCH) $QEMU_INCLUDES"
 fi
-QEMU_INCLUDES="-iquote \$(SRC_PATH)/tcg $QEMU_INCLUDES"
+QEMU_INCLUDES="-\$(CC_IQUOTE) \$(SRC_PATH)/tcg $QEMU_INCLUDES"
 
 echo "TOOLS=$tools" >> $config_host_mak
 echo "ROMS=$roms" >> $config_host_mak
@@ -6643,6 +6658,7 @@ echo "INSTALL_PROG=$install -c -m 0755" >> $config_host_mak
 echo "INSTALL_LIB=$install -c -m 0644" >> $config_host_mak
 echo "PYTHON=$python" >> $config_host_mak
 echo "CC=$cc" >> $config_host_mak
+echo "CC_IQUOTE=\$(if \$(BAD_CC_IQUOTE_OPTION),I,iquote)" >> $config_host_mak
 if $iasl -h > /dev/null 2>&1; then
   echo "IASL=$iasl" >> $config_host_mak
 fi
@@ -7192,6 +7208,87 @@ echo "export PYTHON='$python'" >> "$iotests_common_env"
 
 if [ ! -e "$iotests_check" ]; then
     symlink "$source_path/$iotests_check" "$iotests_check"
+fi
+
+# Check and generate eclipse project
+if test "$generate_eclipse_project" = "yes" ; then
+    symlink "$source_path/Makefile.eclipse" "Makefile.eclipse"
+    if test "$pwd_is_source_path" = "y" ; then
+      eclipse_target_path=''
+      eclipse_build_path='${workspace_loc:/QEMU}'
+      echo -n '' > ${TMPDIR1}/eclipse-fragment-refreshscope
+      echo -n '' > ${TMPDIR1}/eclipse-fragment-linkedresources
+    else
+      eclipse_target_path='_build-tree'
+      eclipse_build_path='${workspace_loc:/QEMU/_build-tree}'
+      cat > ${TMPDIR1}/eclipse-fragment-refreshscope <<EOF
+			<resource resourceType="FOLDER" workspacePath="/QEMU/_build-tree"/>
+EOF
+      cat > ${TMPDIR1}/eclipse-fragment-linkedresources <<EOF
+	<linkedResources>
+		<link>
+			<name>_build-tree</name>
+			<type>2</type>
+			<location>%BUILD_TREE_LOCATION%</location>
+		</link>
+	</linkedResources>
+	<filteredResources>
+		<filter>
+			<id>1537345163637</id>
+			<name>_build-tree</name>
+			<type>21</type>
+			<matcher>
+				<id>org.eclipse.ui.ide.multiFilter</id>
+				<arguments>1.0-name-matches-false-false-*.h</arguments>
+			</matcher>
+		</filter>
+		<filter>
+			<id>1537345163654</id>
+			<name>_build-tree</name>
+			<type>21</type>
+			<matcher>
+				<id>org.eclipse.ui.ide.multiFilter</id>
+				<arguments>1.0-name-matches-false-false-*.c</arguments>
+			</matcher>
+		</filter>
+	</filteredResources>
+EOF
+      sed -i "s|%BUILD_TREE_LOCATION%|$(pwd)|g" ${TMPDIR1}/eclipse-fragment-linkedresources
+    fi
+    for target in all install ; do
+      cat > ${TMPDIR1}/eclipse-fragment-buildtarget <<EOF
+			<target name="%TARGET%" path="%PATH%" targetID="org.eclipse.cdt.build.MakeTargetBuilder">
+				<buildTarget>%TARGET%</buildTarget>
+				<stopOnError>true</stopOnError>
+				<useDefaultCommand>true</useDefaultCommand>
+				<runAllBuilders>true</runAllBuilders>
+			</target>
+EOF
+      sed -i \
+        -e "s|%TARGET%|$target|g" \
+        -e "s|%PATH%|$eclipse_target_path|g" \
+        ${TMPDIR1}/eclipse-fragment-buildtarget
+      cat ${TMPDIR1}/eclipse-fragment-buildtarget >> ${TMPDIR1}/eclipse-fragment-buildtargets
+    done
+    cp -R $source_path/.eclipse-project-template/.settings $source_path
+    sed \
+      -e "s|%BUILD_PATH%|$eclipse_build_path|g" \
+      -e "/%REFRESH_SCOPE%/{r ${TMPDIR1}/eclipse-fragment-refreshscope" -e "d}" \
+      -e "/%BUILD_TARGETS%/{r ${TMPDIR1}/eclipse-fragment-buildtargets" -e "d}" \
+      $source_path/.eclipse-project-template/.cproject > $source_path/.cproject
+    sed \
+      -e "/%LINKED_RESOURCES%/{r ${TMPDIR1}/eclipse-fragment-linkedresources" -e "d}" \
+      $source_path/.eclipse-project-template/.project > $source_path/.project
+    for target in $target_list; do
+      target_exe_name=`make -n -k -i --no-print-directory -C $target print-QEMU_PROG_BUILD 2>/dev/null | cut -d"'" -f2 | sed -n 's/^QEMU_PROG_BUILD=//p'`
+      target_file_path=$(cd $(eval echo $bindir); pwd)/$target_exe_name
+      sed \
+        -e "s|%PROGRAM_NAME%|$target_file_path|g" \
+        $source_path/.eclipse-project-template/gdb_debug_attach.launch > $source_path/$target_exe_name\ \(gdb\ attach\).launch
+    done
+    echo
+    echo "INFO: workaround for Eclipse IDE bug (when project settings being reset during import to workspace):"
+    echo "      close project (or exit eclipse) and run \"make -f Makefile.eclipse fix_ws_import_bug\" in source or build directory"
 fi
 
 # Save the configure command line for later reuse.

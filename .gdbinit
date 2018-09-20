@@ -6,3 +6,6 @@
 
 # Load QEMU-specific sub-commands and settings
 source scripts/qemu-gdb.py
+
+# Load companion helper for session attached using qemu-debug-stub.pl
+source scripts/qemu-gdb-stub-attach.py

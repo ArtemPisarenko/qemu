@@ -1489,6 +1489,15 @@ static void *qemu_tcg_rr_cpu_thread_fn(void *arg)
             atomic_mb_set(&cpu->exit_request, 0);
         }
 
+        /*
+         * Attempt to fix bug https://bugs.launchpad.net/qemu/+bug/1790460
+         * It's possibble solution, which taken from QBox project
+         * (https://git.greensocs.com/qemu/qbox/commit/a8ed106032e375e715a531d6e93e4d9ec295dbdb)
+        */
+        if (all_cpu_threads_idle()) {
+            qemu_notify_event();
+        }
+
         qemu_tcg_rr_wait_io_event(cpu ? cpu : QTAILQ_FIRST(&cpus));
         deal_with_unplugged_cpus();
     }
