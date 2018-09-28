@@ -20,6 +20,7 @@
 #include "qemu/main-loop.h"
 #include "9p.h"
 
+#ifndef HACK_9P_FIX_BLOCKING //TODO: refactor and make conditional
 /*
  * we want to use bottom half because we want to make sure the below
  * sequence of events.
@@ -46,6 +47,12 @@
         /* re-enter back to qemu thread */                              \
         qemu_coroutine_yield();                                         \
     } while (0)
+#else
+#define v9fs_co_run_in_worker(code_block)                               \
+    do {                                                                \
+        code_block;                                                     \
+    } while (0)
+#endif /* HACK_9P_FIX_BLOCKING */
 
 void co_run_in_worker_bh(void *);
 int coroutine_fn v9fs_co_readlink(V9fsPDU *, V9fsPath *, V9fsString *);

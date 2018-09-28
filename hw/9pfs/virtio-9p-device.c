@@ -20,11 +20,18 @@
 #include "hw/virtio/virtio-access.h"
 #include "qemu/iov.h"
 
+static FILE *testfile;
+
 static void virtio_9p_push_and_notify(V9fsPDU *pdu)
 {
     V9fsState *s = pdu->s;
     V9fsVirtioState *v = container_of(s, V9fsVirtioState, state);
     VirtQueueElement *elem = v->elems[pdu->idx];
+
+    P9MsgHeader out;
+    iov_to_buf(elem->in_sg, elem->in_num, 0, &out, 7);
+    int64_t timestamp = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+    fprintf(testfile, "%018ld <- %u\n", timestamp, out.id);
 
     /* push onto queue and notify */
     virtqueue_push(v->vq, elem, pdu->size);
@@ -66,6 +73,9 @@ static void handle_9p_output(VirtIODevice *vdev, VirtQueue *vq)
         }
 
         v->elems[pdu->idx] = elem;
+
+        int64_t timestamp = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+        fprintf(testfile, "%018ld -> %u (req size %zu, resp size %zu)\n", timestamp, out.id, iov_size(elem->out_sg, elem->out_num), iov_size(elem->in_sg, elem->in_num));
 
         pdu_submit(pdu, &out);
     }
@@ -205,6 +215,11 @@ static void virtio_9p_device_realize(DeviceState *dev, Error **errp)
     v->config_size = sizeof(struct virtio_9p_config) + strlen(s->fsconf.tag);
     virtio_init(vdev, "virtio-9p", VIRTIO_ID_9P, v->config_size);
     v->vq = virtio_add_queue(vdev, MAX_REQ, handle_9p_output);
+
+    testfile = fopen("9pfs_test_dump.txt", "w");
+    if (testfile == NULL) {
+    	perror("open");
+    }
 }
 
 static void virtio_9p_device_unrealize(DeviceState *dev, Error **errp)
@@ -215,6 +230,8 @@ static void virtio_9p_device_unrealize(DeviceState *dev, Error **errp)
 
     virtio_cleanup(vdev);
     v9fs_device_unrealize_common(s, errp);
+
+    fclose(testfile);
 }
 
 /* virtio-9p device */

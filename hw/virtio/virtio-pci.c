@@ -1069,12 +1069,14 @@ static void virtio_9p_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
     object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 
+#if 0 //TODO: restore and force IOEVENTFD off globally...
 static Property virtio_9p_pci_properties[] = {
     DEFINE_PROP_BIT("ioeventfd", VirtIOPCIProxy, flags,
                     VIRTIO_PCI_FLAG_USE_IOEVENTFD_BIT, true),
     DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, 2),
     DEFINE_PROP_END_OF_LIST(),
 };
+#endif
 
 static void virtio_9p_pci_class_init(ObjectClass *klass, void *data)
 {
@@ -1088,7 +1090,9 @@ static void virtio_9p_pci_class_init(ObjectClass *klass, void *data)
     pcidev_k->revision = VIRTIO_PCI_ABI_VERSION;
     pcidev_k->class_id = 0x2;
     set_bit(DEVICE_CATEGORY_STORAGE, dc->categories);
+#if 0 //TODO: restore
     dc->props = virtio_9p_pci_properties;
+#endif
 }
 
 static void virtio_9p_pci_instance_init(Object *obj)
