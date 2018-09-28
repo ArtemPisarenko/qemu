@@ -50,11 +50,15 @@ static void chr_be_event(Chardev *s, int event)
 {
     CharBackend *be = s->be;
 
+#ifdef HACK_CHARDEV_SYNC
+    qemu_chr_fe_event(be, event);
+#else
     if (!be || !be->chr_event) {
         return;
     }
 
     be->chr_event(be->opaque, event);
+#endif
 }
 
 void qemu_chr_be_event(Chardev *s, int event)

@@ -120,9 +120,13 @@ static void mux_chr_send_event(MuxChardev *d, int mux_nr, int event)
 {
     CharBackend *be = d->backends[mux_nr];
 
+#ifdef HACK_CHARDEV_SYNC
+    qemu_chr_fe_event(be, event);
+#else
     if (be && be->chr_event) {
         be->chr_event(be->opaque, event);
     }
+#endif
 }
 
 static void mux_chr_be_event(Chardev *chr, int event)

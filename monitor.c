@@ -4581,6 +4581,9 @@ void monitor_init(Chardev *chr, int flags)
     monitor_data_init(mon, false, use_oob);
 
     qemu_chr_fe_init(&mon->chr, chr, &error_abort);
+#ifdef HACK_CHARDEV_SYNC
+    qemu_chr_fe_mark_non_guest_device(&mon->chr);
+#endif
     mon->flags = flags;
     if (use_readline) {
         mon->rs = readline_init(monitor_readline_printf,
