@@ -32,9 +32,9 @@ void rng_backend_request_entropy(RngBackend *s, size_t size,
         req->opaque = opaque;
         req->data = g_malloc(req->size);
 
-        k->request_entropy(s, req);
-
         QSIMPLEQ_INSERT_TAIL(&s->requests, req, next);
+
+        k->request_entropy(s, req);
     }
 }
 

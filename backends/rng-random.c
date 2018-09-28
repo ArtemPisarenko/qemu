@@ -10,6 +10,8 @@
  * See the COPYING file in the top-level directory.
  */
 
+#define HACK_FIX_BLOCKING //TODO: merge to global option(sync)
+
 #include "qemu/osdep.h"
 #include "sysemu/rng-random.h"
 #include "sysemu/rng.h"
@@ -32,6 +34,7 @@ struct RngRandom
  * set the filename to use to open the backend.
  */
 
+#ifndef HACK_FIX_BLOCKING
 static void entropy_available(void *opaque)
 {
     RngRandom *s = RNG_RANDOM(opaque);
@@ -54,16 +57,25 @@ static void entropy_available(void *opaque)
     /* We've drained all requests, the fd handler can be reset. */
     qemu_set_fd_handler(s->fd, NULL, NULL, NULL);
 }
+#endif
 
 static void rng_random_request_entropy(RngBackend *b, RngRequest *req)
 {
     RngRandom *s = RNG_RANDOM(b);
 
+#ifndef HACK_FIX_BLOCKING //TODO: refactor and make conditional
     if (QSIMPLEQ_EMPTY(&s->parent.requests)) {
         /* If there are no pending requests yet, we need to
          * install our fd handler. */
         qemu_set_fd_handler(s->fd, entropy_available, NULL, s);
     }
+#else
+    ssize_t len;
+    len = read(s->fd, req->data, req->size);
+    g_assert(len == req->size);
+    req->receive_entropy(req->opaque, req->data, len);
+    rng_backend_finalize_request(&s->parent, req);
+#endif
 }
 
 static void rng_random_opened(RngBackend *b, Error **errp)
@@ -74,7 +86,11 @@ static void rng_random_opened(RngBackend *b, Error **errp)
         error_setg(errp, QERR_INVALID_PARAMETER_VALUE,
                    "filename", "a valid filename");
     } else {
+#ifndef HACK_FIX_BLOCKING //TODO: refactor and make conditional
         s->fd = qemu_open(s->filename, O_RDONLY | O_NONBLOCK);
+#else
+        s->fd = qemu_open(s->filename, O_RDONLY);
+#endif
         if (s->fd == -1) {
             error_setg_file_open(errp, errno, s->filename);
         }
@@ -121,7 +137,9 @@ static void rng_random_finalize(Object *obj)
     RngRandom *s = RNG_RANDOM(obj);
 
     if (s->fd != -1) {
+#ifndef HACK_FIX_BLOCKING //TODO: refactor and make conditional
         qemu_set_fd_handler(s->fd, NULL, NULL, NULL);
+#endif
         qemu_close(s->fd);
     }
 
