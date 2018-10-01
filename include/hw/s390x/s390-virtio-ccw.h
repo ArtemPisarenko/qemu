@@ -29,7 +29,6 @@ typedef struct S390CcwMachineState {
     bool aes_key_wrap;
     bool dea_key_wrap;
     uint8_t loadparm[8];
-    bool s390_squash_mcss;
 } S390CcwMachineState;
 
 typedef struct S390CcwMachineClass {
@@ -52,7 +51,5 @@ bool cpu_model_allowed(void);
  * is enabled, false if it is disabled.
  */
 bool css_migration_enabled(void);
-
-void subsystem_reset(void);
 
 #endif

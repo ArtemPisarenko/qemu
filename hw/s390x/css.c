@@ -617,6 +617,14 @@ void css_inject_io_interrupt(SubchDev *sch)
 void css_conditional_io_interrupt(SubchDev *sch)
 {
     /*
+     * If the subchannel is not enabled, it is not made status pending
+     * (see PoP p. 16-17, "Status Control").
+     */
+    if (!(sch->curr_status.pmcw.flags & PMCW_FLAGS_MASK_ENA)) {
+        return;
+    }
+
+    /*
      * If the subchannel is not currently status pending, make it pending
      * with alert status.
      */
@@ -1190,18 +1198,6 @@ static IOInstEnding sch_handle_start_func_passthrough(SubchDev *sch)
     if (!(s->ctrl & SCSW_ACTL_SUSP)) {
         assert(orb != NULL);
         p->intparm = orb->intparm;
-    }
-
-    /*
-     * Only support prefetch enable mode.
-     * Only support 64bit addressing idal.
-     */
-    if (!(orb->ctrl0 & ORB_CTRL0_MASK_PFCH) ||
-        !(orb->ctrl0 & ORB_CTRL0_MASK_C64)) {
-        warn_report("vfio-ccw requires PFCH and C64 flags set");
-        sch_gen_unit_exception(sch);
-        css_inject_io_interrupt(sch);
-        return IOINST_CC_EXPECTED;
     }
     return s390_ccw_cmd_request(sch);
 }
@@ -2363,15 +2359,13 @@ const PropertyInfo css_devid_ro_propinfo = {
     .get = get_css_devid,
 };
 
-SubchDev *css_create_sch(CssDevId bus_id, bool squash_mcss, Error **errp)
+SubchDev *css_create_sch(CssDevId bus_id, Error **errp)
 {
     uint16_t schid = 0;
     SubchDev *sch;
 
     if (bus_id.valid) {
-        if (squash_mcss) {
-            bus_id.cssid = channel_subsys.default_cssid;
-        } else if (!channel_subsys.css[bus_id.cssid]) {
+        if (!channel_subsys.css[bus_id.cssid]) {
             css_create_css_image(bus_id.cssid, false);
         }
 

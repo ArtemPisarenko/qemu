@@ -56,7 +56,6 @@ static void fe_event(void *opaque, int event)
     }
 }
 
-#ifdef CONFIG_HAS_GLIB_SUBPROCESS_TESTS
 #ifdef _WIN32
 static void char_console_test_subprocess(void)
 {
@@ -106,7 +105,6 @@ static void char_stdio_test(void)
     g_test_trap_assert_passed();
     g_test_trap_assert_stdout("buf");
 }
-#endif
 
 static void char_ringbuf_test(void)
 {
@@ -214,6 +212,10 @@ static void char_mux_test(void)
     g_assert_cmpint(h2.last_event, ==, -1);
 
     /* switch focus */
+    qemu_chr_be_write(base, (void *)"\1b", 2);
+    g_assert_cmpint(h1.last_event, ==, 42);
+    g_assert_cmpint(h2.last_event, ==, CHR_EVENT_BREAK);
+
     qemu_chr_be_write(base, (void *)"\1c", 2);
     g_assert_cmpint(h1.last_event, ==, CHR_EVENT_MUX_IN);
     g_assert_cmpint(h2.last_event, ==, CHR_EVENT_MUX_OUT);
@@ -226,6 +228,10 @@ static void char_mux_test(void)
     g_assert_cmpint(h1.read_count, ==, 6);
     g_assert_cmpstr(h1.read_buf, ==, "hello");
     h1.read_count = 0;
+
+    qemu_chr_be_write(base, (void *)"\1b", 2);
+    g_assert_cmpint(h1.last_event, ==, CHR_EVENT_BREAK);
+    g_assert_cmpint(h2.last_event, ==, CHR_EVENT_MUX_OUT);
 
     /* remove first handler */
     qemu_chr_fe_set_handlers(&chr_be1, NULL, NULL, NULL, NULL,
@@ -322,7 +328,7 @@ static void char_socket_test_common(Chardev *chr)
     qdict = qobject_to(QDict, addr);
     port = qdict_get_str(qdict, "port");
     tmp = g_strdup_printf("tcp:127.0.0.1:%s", port);
-    QDECREF(qdict);
+    qobject_unref(qdict);
 
     qemu_chr_fe_init(&be, chr, &error_abort);
     qemu_chr_fe_set_handlers(&be, socket_can_read, socket_read,
@@ -799,14 +805,12 @@ int main(int argc, char **argv)
     g_test_add_func("/char/invalid", char_invalid_test);
     g_test_add_func("/char/ringbuf", char_ringbuf_test);
     g_test_add_func("/char/mux", char_mux_test);
-#ifdef CONFIG_HAS_GLIB_SUBPROCESS_TESTS
 #ifdef _WIN32
     g_test_add_func("/char/console/subprocess", char_console_test_subprocess);
     g_test_add_func("/char/console", char_console_test);
 #endif
     g_test_add_func("/char/stdio/subprocess", char_stdio_test_subprocess);
     g_test_add_func("/char/stdio", char_stdio_test);
-#endif
 #ifndef _WIN32
     g_test_add_func("/char/pipe", char_pipe_test);
 #endif
