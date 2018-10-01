@@ -296,14 +296,13 @@ static void vnc_qmp_event(VncState *vs, QAPIEvent event)
 
     switch (event) {
     case QAPI_EVENT_VNC_CONNECTED:
-        qapi_event_send_vnc_connected(si, qapi_VncClientInfo_base(vs->info),
-                                      &error_abort);
+        qapi_event_send_vnc_connected(si, qapi_VncClientInfo_base(vs->info));
         break;
     case QAPI_EVENT_VNC_INITIALIZED:
-        qapi_event_send_vnc_initialized(si, vs->info, &error_abort);
+        qapi_event_send_vnc_initialized(si, vs->info);
         break;
     case QAPI_EVENT_VNC_DISCONNECTED:
-        qapi_event_send_vnc_disconnected(si, vs->info, &error_abort);
+        qapi_event_send_vnc_disconnected(si, vs->info);
         break;
     default:
         break;
@@ -1138,6 +1137,7 @@ static void audio_capture_notify(void *opaque, audcnotification_e cmd)
 {
     VncState *vs = opaque;
 
+    assert(vs->magic == VNC_MAGIC);
     switch (cmd) {
     case AUD_CNOTIFY_DISABLE:
         vnc_lock_output(vs);
@@ -1167,6 +1167,7 @@ static void audio_capture(void *opaque, void *buf, int size)
 {
     VncState *vs = opaque;
 
+    assert(vs->magic == VNC_MAGIC);
     vnc_lock_output(vs);
     if (vs->output.offset < vs->throttle_output_offset) {
         vnc_write_u8(vs, VNC_MSG_SERVER_QEMU);
@@ -1275,6 +1276,7 @@ void vnc_disconnect_finish(VncState *vs)
     vs->ioc = NULL;
     object_unref(OBJECT(vs->sioc));
     vs->sioc = NULL;
+    vs->magic = 0;
     g_free(vs);
 }
 
@@ -1414,7 +1416,7 @@ static void vnc_client_write_locked(VncState *vs)
 
 static void vnc_client_write(VncState *vs)
 {
-
+    assert(vs->magic == VNC_MAGIC);
     vnc_lock_output(vs);
     if (vs->output.offset) {
         vnc_client_write_locked(vs);
@@ -1487,6 +1489,7 @@ static void vnc_jobs_bh(void *opaque)
 {
     VncState *vs = opaque;
 
+    assert(vs->magic == VNC_MAGIC);
     vnc_jobs_consume_buffer(vs);
 }
 
@@ -1537,15 +1540,18 @@ gboolean vnc_client_io(QIOChannel *ioc G_GNUC_UNUSED,
                        GIOCondition condition, void *opaque)
 {
     VncState *vs = opaque;
+
+    assert(vs->magic == VNC_MAGIC);
     if (condition & G_IO_IN) {
         if (vnc_client_read(vs) < 0) {
-            goto end;
+            /* vs is free()ed here */
+            return TRUE;
         }
     }
     if (condition & G_IO_OUT) {
         vnc_client_write(vs);
     }
-end:
+
     if (vs->disconnecting) {
         if (vs->ioc_tag != 0) {
             g_source_remove(vs->ioc_tag);
@@ -1567,6 +1573,7 @@ end:
 
 void vnc_write(VncState *vs, const void *data, size_t len)
 {
+    assert(vs->magic == VNC_MAGIC);
     if (vs->disconnecting) {
         return;
     }
@@ -2959,7 +2966,8 @@ static int vnc_refresh_server_surface(VncDisplay *vd)
             PIXMAN_FORMAT_BPP(pixman_image_get_format(vd->guest.fb));
         guest_row0 = (uint8_t *)pixman_image_get_data(vd->guest.fb);
         guest_stride = pixman_image_get_stride(vd->guest.fb);
-        guest_ll = pixman_image_get_width(vd->guest.fb) * (DIV_ROUND_UP(guest_bpp, 8));
+        guest_ll = pixman_image_get_width(vd->guest.fb)
+                   * DIV_ROUND_UP(guest_bpp, 8);
     }
     line_bytes = MIN(server_stride, guest_ll);
 
@@ -3063,6 +3071,7 @@ static void vnc_connect(VncDisplay *vd, QIOChannelSocket *sioc,
     int i;
 
     trace_vnc_client_connect(vs, sioc);
+    vs->magic = VNC_MAGIC;
     vs->sioc = sioc;
     object_ref(OBJECT(vs->sioc));
     vs->ioc = QIO_CHANNEL(sioc);
@@ -3336,10 +3345,6 @@ static QemuOptsList qemu_vnc_opts = {
             .name = "tls-creds",
             .type = QEMU_OPT_STRING,
         },{
-            /* Deprecated in favour of tls-creds */
-            .name = "x509",
-            .type = QEMU_OPT_STRING,
-        },{
             .name = "share",
             .type = QEMU_OPT_STRING,
         },{
@@ -3375,14 +3380,6 @@ static QemuOptsList qemu_vnc_opts = {
         },{
             .name = "sasl",
             .type = QEMU_OPT_BOOL,
-        },{
-            /* Deprecated in favour of tls-creds */
-            .name = "tls",
-            .type = QEMU_OPT_BOOL,
-        },{
-            /* Deprecated in favour of tls-creds */
-            .name = "x509verify",
-            .type = QEMU_OPT_STRING,
         },{
             .name = "acl",
             .type = QEMU_OPT_BOOL,
@@ -3507,51 +3504,6 @@ vnc_display_setup_auth(int *auth,
         }
     }
     return 0;
-}
-
-
-/*
- * Handle back compat with old CLI syntax by creating some
- * suitable QCryptoTLSCreds objects
- */
-static QCryptoTLSCreds *
-vnc_display_create_creds(bool x509,
-                         bool x509verify,
-                         const char *dir,
-                         const char *id,
-                         Error **errp)
-{
-    gchar *credsid = g_strdup_printf("tlsvnc%s", id);
-    Object *parent = object_get_objects_root();
-    Object *creds;
-    Error *err = NULL;
-
-    if (x509) {
-        creds = object_new_with_props(TYPE_QCRYPTO_TLS_CREDS_X509,
-                                      parent,
-                                      credsid,
-                                      &err,
-                                      "endpoint", "server",
-                                      "dir", dir,
-                                      "verify-peer", x509verify ? "yes" : "no",
-                                      NULL);
-    } else {
-        creds = object_new_with_props(TYPE_QCRYPTO_TLS_CREDS_ANON,
-                                      parent,
-                                      credsid,
-                                      &err,
-                                      "endpoint", "server",
-                                      NULL);
-    }
-
-    g_free(credsid);
-
-    if (err) {
-        error_propagate(errp, err);
-        return NULL;
-    }
-
-    return QCRYPTO_TLS_CREDS(creds);
 }
 
 
@@ -3921,15 +3873,6 @@ void vnc_display_open(const char *id, Error **errp)
     credid = qemu_opt_get(opts, "tls-creds");
     if (credid) {
         Object *creds;
-        if (qemu_opt_get(opts, "tls") ||
-            qemu_opt_get(opts, "x509") ||
-            qemu_opt_get(opts, "x509verify")) {
-            error_setg(errp,
-                       "'tls-creds' parameter is mutually exclusive with "
-                       "'tls', 'x509' and 'x509verify' parameters");
-            goto fail;
-        }
-
         creds = object_resolve_path_component(
             object_get_objects_root(), credid);
         if (!creds) {
@@ -3951,31 +3894,6 @@ void vnc_display_open(const char *id, Error **errp)
             error_setg(errp,
                        "Expecting TLS credentials with a server endpoint");
             goto fail;
-        }
-    } else {
-        const char *path;
-        bool tls = false, x509 = false, x509verify = false;
-        tls  = qemu_opt_get_bool(opts, "tls", false);
-        if (tls) {
-            path = qemu_opt_get(opts, "x509");
-
-            if (path) {
-                x509 = true;
-            } else {
-                path = qemu_opt_get(opts, "x509verify");
-                if (path) {
-                    x509 = true;
-                    x509verify = true;
-                }
-            }
-            vd->tlscreds = vnc_display_create_creds(x509,
-                                                    x509verify,
-                                                    path,
-                                                    vd->id,
-                                                    errp);
-            if (!vd->tlscreds) {
-                goto fail;
-            }
         }
     }
     acl = qemu_opt_get_bool(opts, "acl", false);

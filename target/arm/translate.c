@@ -995,7 +995,7 @@ static inline void gen_bx_excret_final_code(DisasContext *s)
     if (is_singlestepping(s)) {
         gen_singlestep_exception(s);
     } else {
-        tcg_gen_exit_tb(0);
+        tcg_gen_exit_tb(NULL, 0);
     }
     gen_set_label(excret_label);
     /* Yes: this is an exception return.
@@ -1100,7 +1100,14 @@ static inline TCGv gen_aa32_addr(DisasContext *s, TCGv_i32 a32, TCGMemOp op)
 static void gen_aa32_ld_i32(DisasContext *s, TCGv_i32 val, TCGv_i32 a32,
                             int index, TCGMemOp opc)
 {
-    TCGv addr = gen_aa32_addr(s, a32, opc);
+    TCGv addr;
+
+    if (arm_dc_feature(s, ARM_FEATURE_M) &&
+        !arm_dc_feature(s, ARM_FEATURE_M_MAIN)) {
+        opc |= MO_ALIGN;
+    }
+
+    addr = gen_aa32_addr(s, a32, opc);
     tcg_gen_qemu_ld_i32(val, addr, index, opc);
     tcg_temp_free(addr);
 }
@@ -1108,7 +1115,14 @@ static void gen_aa32_ld_i32(DisasContext *s, TCGv_i32 val, TCGv_i32 a32,
 static void gen_aa32_st_i32(DisasContext *s, TCGv_i32 val, TCGv_i32 a32,
                             int index, TCGMemOp opc)
 {
-    TCGv addr = gen_aa32_addr(s, a32, opc);
+    TCGv addr;
+
+    if (arm_dc_feature(s, ARM_FEATURE_M) &&
+        !arm_dc_feature(s, ARM_FEATURE_M_MAIN)) {
+        opc |= MO_ALIGN;
+    }
+
+    addr = gen_aa32_addr(s, a32, opc);
     tcg_gen_qemu_st_i32(val, addr, index, opc);
     tcg_temp_free(addr);
 }
@@ -1613,7 +1627,7 @@ static inline void gen_mov_vreg_F0(int dp, int reg)
         tcg_gen_st_f32(cpu_F0s, cpu_env, vfp_reg_offset(dp, reg));
 }
 
-#define ARM_CP_RW_BIT	(1 << 20)
+#define ARM_CP_RW_BIT   (1 << 20)
 
 static inline void iwmmxt_load_reg(TCGv_i64 var, int reg)
 {
@@ -1847,12 +1861,12 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
             wrd = insn & 0xf;
             rdlo = (insn >> 12) & 0xf;
             rdhi = (insn >> 16) & 0xf;
-            if (insn & ARM_CP_RW_BIT) {			/* TMRRC */
+            if (insn & ARM_CP_RW_BIT) {                         /* TMRRC */
                 iwmmxt_load_reg(cpu_V0, wrd);
                 tcg_gen_extrl_i64_i32(cpu_R[rdlo], cpu_V0);
                 tcg_gen_shri_i64(cpu_V0, cpu_V0, 32);
                 tcg_gen_extrl_i64_i32(cpu_R[rdhi], cpu_V0);
-            } else {					/* TMCRR */
+            } else {                                    /* TMCRR */
                 tcg_gen_concat_i32_i64(cpu_V0, cpu_R[rdlo], cpu_R[rdhi]);
                 iwmmxt_store_reg(cpu_V0, wrd);
                 gen_op_iwmmxt_set_mup();
@@ -1867,25 +1881,25 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
             return 1;
         }
         if (insn & ARM_CP_RW_BIT) {
-            if ((insn >> 28) == 0xf) {			/* WLDRW wCx */
+            if ((insn >> 28) == 0xf) {                  /* WLDRW wCx */
                 tmp = tcg_temp_new_i32();
                 gen_aa32_ld32u(s, tmp, addr, get_mem_index(s));
                 iwmmxt_store_creg(wrd, tmp);
             } else {
                 i = 1;
                 if (insn & (1 << 8)) {
-                    if (insn & (1 << 22)) {		/* WLDRD */
+                    if (insn & (1 << 22)) {             /* WLDRD */
                         gen_aa32_ld64(s, cpu_M0, addr, get_mem_index(s));
                         i = 0;
-                    } else {				/* WLDRW wRd */
+                    } else {                            /* WLDRW wRd */
                         tmp = tcg_temp_new_i32();
                         gen_aa32_ld32u(s, tmp, addr, get_mem_index(s));
                     }
                 } else {
                     tmp = tcg_temp_new_i32();
-                    if (insn & (1 << 22)) {		/* WLDRH */
+                    if (insn & (1 << 22)) {             /* WLDRH */
                         gen_aa32_ld16u(s, tmp, addr, get_mem_index(s));
-                    } else {				/* WLDRB */
+                    } else {                            /* WLDRB */
                         gen_aa32_ld8u(s, tmp, addr, get_mem_index(s));
                     }
                 }
@@ -1896,24 +1910,24 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
                 gen_op_iwmmxt_movq_wRn_M0(wrd);
             }
         } else {
-            if ((insn >> 28) == 0xf) {			/* WSTRW wCx */
+            if ((insn >> 28) == 0xf) {                  /* WSTRW wCx */
                 tmp = iwmmxt_load_creg(wrd);
                 gen_aa32_st32(s, tmp, addr, get_mem_index(s));
             } else {
                 gen_op_iwmmxt_movq_M0_wRn(wrd);
                 tmp = tcg_temp_new_i32();
                 if (insn & (1 << 8)) {
-                    if (insn & (1 << 22)) {		/* WSTRD */
+                    if (insn & (1 << 22)) {             /* WSTRD */
                         gen_aa32_st64(s, cpu_M0, addr, get_mem_index(s));
-                    } else {				/* WSTRW wRd */
+                    } else {                            /* WSTRW wRd */
                         tcg_gen_extrl_i64_i32(tmp, cpu_M0);
                         gen_aa32_st32(s, tmp, addr, get_mem_index(s));
                     }
                 } else {
-                    if (insn & (1 << 22)) {		/* WSTRH */
+                    if (insn & (1 << 22)) {             /* WSTRH */
                         tcg_gen_extrl_i64_i32(tmp, cpu_M0);
                         gen_aa32_st16(s, tmp, addr, get_mem_index(s));
-                    } else {				/* WSTRB */
+                    } else {                            /* WSTRB */
                         tcg_gen_extrl_i64_i32(tmp, cpu_M0);
                         gen_aa32_st8(s, tmp, addr, get_mem_index(s));
                     }
@@ -1929,7 +1943,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         return 1;
 
     switch (((insn >> 12) & 0xf00) | ((insn >> 4) & 0xff)) {
-    case 0x000:						/* WOR */
+    case 0x000:                                                 /* WOR */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 0) & 0xf;
         rd1 = (insn >> 16) & 0xf;
@@ -1940,7 +1954,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x011:						/* TMCR */
+    case 0x011:                                                 /* TMCR */
         if (insn & 0xf)
             return 1;
         rd = (insn >> 12) & 0xf;
@@ -1971,7 +1985,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
             return 1;
         }
         break;
-    case 0x100:						/* WXOR */
+    case 0x100:                                                 /* WXOR */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 0) & 0xf;
         rd1 = (insn >> 16) & 0xf;
@@ -1982,7 +1996,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x111:						/* TMRC */
+    case 0x111:                                                 /* TMRC */
         if (insn & 0xf)
             return 1;
         rd = (insn >> 12) & 0xf;
@@ -1990,7 +2004,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         tmp = iwmmxt_load_creg(wrd);
         store_reg(s, rd, tmp);
         break;
-    case 0x300:						/* WANDN */
+    case 0x300:                                                 /* WANDN */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 0) & 0xf;
         rd1 = (insn >> 16) & 0xf;
@@ -2002,7 +2016,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x200:						/* WAND */
+    case 0x200:                                                 /* WAND */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 0) & 0xf;
         rd1 = (insn >> 16) & 0xf;
@@ -2013,7 +2027,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x810: case 0xa10:				/* WMADD */
+    case 0x810: case 0xa10:                             /* WMADD */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 0) & 0xf;
         rd1 = (insn >> 16) & 0xf;
@@ -2025,7 +2039,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_movq_wRn_M0(wrd);
         gen_op_iwmmxt_set_mup();
         break;
-    case 0x10e: case 0x50e: case 0x90e: case 0xd0e:	/* WUNPCKIL */
+    case 0x10e: case 0x50e: case 0x90e: case 0xd0e:     /* WUNPCKIL */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
         rd1 = (insn >> 0) & 0xf;
@@ -2047,7 +2061,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x10c: case 0x50c: case 0x90c: case 0xd0c:	/* WUNPCKIH */
+    case 0x10c: case 0x50c: case 0x90c: case 0xd0c:     /* WUNPCKIH */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
         rd1 = (insn >> 0) & 0xf;
@@ -2069,7 +2083,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x012: case 0x112: case 0x412: case 0x512:	/* WSAD */
+    case 0x012: case 0x112: case 0x412: case 0x512:     /* WSAD */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
         rd1 = (insn >> 0) & 0xf;
@@ -2083,7 +2097,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_movq_wRn_M0(wrd);
         gen_op_iwmmxt_set_mup();
         break;
-    case 0x010: case 0x110: case 0x210: case 0x310:	/* WMUL */
+    case 0x010: case 0x110: case 0x210: case 0x310:     /* WMUL */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
         rd1 = (insn >> 0) & 0xf;
@@ -2102,7 +2116,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_movq_wRn_M0(wrd);
         gen_op_iwmmxt_set_mup();
         break;
-    case 0x410: case 0x510: case 0x610: case 0x710:	/* WMAC */
+    case 0x410: case 0x510: case 0x610: case 0x710:     /* WMAC */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
         rd1 = (insn >> 0) & 0xf;
@@ -2118,7 +2132,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_movq_wRn_M0(wrd);
         gen_op_iwmmxt_set_mup();
         break;
-    case 0x006: case 0x406: case 0x806: case 0xc06:	/* WCMPEQ */
+    case 0x006: case 0x406: case 0x806: case 0xc06:     /* WCMPEQ */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
         rd1 = (insn >> 0) & 0xf;
@@ -2140,7 +2154,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x800: case 0x900: case 0xc00: case 0xd00:	/* WAVG2 */
+    case 0x800: case 0x900: case 0xc00: case 0xd00:     /* WAVG2 */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
         rd1 = (insn >> 0) & 0xf;
@@ -2160,7 +2174,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x802: case 0x902: case 0xa02: case 0xb02:	/* WALIGNR */
+    case 0x802: case 0x902: case 0xa02: case 0xb02:     /* WALIGNR */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
         rd1 = (insn >> 0) & 0xf;
@@ -2173,7 +2187,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_movq_wRn_M0(wrd);
         gen_op_iwmmxt_set_mup();
         break;
-    case 0x601: case 0x605: case 0x609: case 0x60d:	/* TINSR */
+    case 0x601: case 0x605: case 0x609: case 0x60d:     /* TINSR */
         if (((insn >> 6) & 3) == 3)
             return 1;
         rd = (insn >> 12) & 0xf;
@@ -2204,7 +2218,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_movq_wRn_M0(wrd);
         gen_op_iwmmxt_set_mup();
         break;
-    case 0x107: case 0x507: case 0x907: case 0xd07:	/* TEXTRM */
+    case 0x107: case 0x507: case 0x907: case 0xd07:     /* TEXTRM */
         rd = (insn >> 12) & 0xf;
         wrd = (insn >> 16) & 0xf;
         if (rd == 15 || ((insn >> 22) & 3) == 3)
@@ -2237,7 +2251,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         }
         store_reg(s, rd, tmp);
         break;
-    case 0x117: case 0x517: case 0x917: case 0xd17:	/* TEXTRC */
+    case 0x117: case 0x517: case 0x917: case 0xd17:     /* TEXTRC */
         if ((insn & 0x000ff008) != 0x0003f000 || ((insn >> 22) & 3) == 3)
             return 1;
         tmp = iwmmxt_load_creg(ARM_IWMMXT_wCASF);
@@ -2256,7 +2270,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_set_nzcv(tmp);
         tcg_temp_free_i32(tmp);
         break;
-    case 0x401: case 0x405: case 0x409: case 0x40d:	/* TBCST */
+    case 0x401: case 0x405: case 0x409: case 0x40d:     /* TBCST */
         if (((insn >> 6) & 3) == 3)
             return 1;
         rd = (insn >> 12) & 0xf;
@@ -2277,7 +2291,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_movq_wRn_M0(wrd);
         gen_op_iwmmxt_set_mup();
         break;
-    case 0x113: case 0x513: case 0x913: case 0xd13:	/* TANDC */
+    case 0x113: case 0x513: case 0x913: case 0xd13:     /* TANDC */
         if ((insn & 0x000ff00f) != 0x0003f000 || ((insn >> 22) & 3) == 3)
             return 1;
         tmp = iwmmxt_load_creg(ARM_IWMMXT_wCASF);
@@ -2305,7 +2319,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         tcg_temp_free_i32(tmp2);
         tcg_temp_free_i32(tmp);
         break;
-    case 0x01c: case 0x41c: case 0x81c: case 0xc1c:	/* WACC */
+    case 0x01c: case 0x41c: case 0x81c: case 0xc1c:     /* WACC */
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
         gen_op_iwmmxt_movq_M0_wRn(rd0);
@@ -2325,7 +2339,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_movq_wRn_M0(wrd);
         gen_op_iwmmxt_set_mup();
         break;
-    case 0x115: case 0x515: case 0x915: case 0xd15:	/* TORC */
+    case 0x115: case 0x515: case 0x915: case 0xd15:     /* TORC */
         if ((insn & 0x000ff00f) != 0x0003f000 || ((insn >> 22) & 3) == 3)
             return 1;
         tmp = iwmmxt_load_creg(ARM_IWMMXT_wCASF);
@@ -2353,7 +2367,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         tcg_temp_free_i32(tmp2);
         tcg_temp_free_i32(tmp);
         break;
-    case 0x103: case 0x503: case 0x903: case 0xd03:	/* TMOVMSK */
+    case 0x103: case 0x503: case 0x903: case 0xd03:     /* TMOVMSK */
         rd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
         if ((insn & 0xf) != 0 || ((insn >> 22) & 3) == 3)
@@ -2373,7 +2387,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         }
         store_reg(s, rd, tmp);
         break;
-    case 0x106: case 0x306: case 0x506: case 0x706:	/* WCMPGT */
+    case 0x106: case 0x306: case 0x506: case 0x706:     /* WCMPGT */
     case 0x906: case 0xb06: case 0xd06: case 0xf06:
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
@@ -2405,7 +2419,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x00e: case 0x20e: case 0x40e: case 0x60e:	/* WUNPCKEL */
+    case 0x00e: case 0x20e: case 0x40e: case 0x60e:     /* WUNPCKEL */
     case 0x80e: case 0xa0e: case 0xc0e: case 0xe0e:
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
@@ -2436,7 +2450,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x00c: case 0x20c: case 0x40c: case 0x60c:	/* WUNPCKEH */
+    case 0x00c: case 0x20c: case 0x40c: case 0x60c:     /* WUNPCKEH */
     case 0x80c: case 0xa0c: case 0xc0c: case 0xe0c:
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
@@ -2467,7 +2481,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x204: case 0x604: case 0xa04: case 0xe04:	/* WSRL */
+    case 0x204: case 0x604: case 0xa04: case 0xe04:     /* WSRL */
     case 0x214: case 0x614: case 0xa14: case 0xe14:
         if (((insn >> 22) & 3) == 0)
             return 1;
@@ -2495,7 +2509,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x004: case 0x404: case 0x804: case 0xc04:	/* WSRA */
+    case 0x004: case 0x404: case 0x804: case 0xc04:     /* WSRA */
     case 0x014: case 0x414: case 0x814: case 0xc14:
         if (((insn >> 22) & 3) == 0)
             return 1;
@@ -2523,7 +2537,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x104: case 0x504: case 0x904: case 0xd04:	/* WSLL */
+    case 0x104: case 0x504: case 0x904: case 0xd04:     /* WSLL */
     case 0x114: case 0x514: case 0x914: case 0xd14:
         if (((insn >> 22) & 3) == 0)
             return 1;
@@ -2551,7 +2565,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x304: case 0x704: case 0xb04: case 0xf04:	/* WROR */
+    case 0x304: case 0x704: case 0xb04: case 0xf04:     /* WROR */
     case 0x314: case 0x714: case 0xb14: case 0xf14:
         if (((insn >> 22) & 3) == 0)
             return 1;
@@ -2587,7 +2601,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x116: case 0x316: case 0x516: case 0x716:	/* WMIN */
+    case 0x116: case 0x316: case 0x516: case 0x716:     /* WMIN */
     case 0x916: case 0xb16: case 0xd16: case 0xf16:
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
@@ -2618,7 +2632,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_movq_wRn_M0(wrd);
         gen_op_iwmmxt_set_mup();
         break;
-    case 0x016: case 0x216: case 0x416: case 0x616:	/* WMAX */
+    case 0x016: case 0x216: case 0x416: case 0x616:     /* WMAX */
     case 0x816: case 0xa16: case 0xc16: case 0xe16:
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
@@ -2649,7 +2663,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_movq_wRn_M0(wrd);
         gen_op_iwmmxt_set_mup();
         break;
-    case 0x002: case 0x102: case 0x202: case 0x302:	/* WALIGNI */
+    case 0x002: case 0x102: case 0x202: case 0x302:     /* WALIGNI */
     case 0x402: case 0x502: case 0x602: case 0x702:
         wrd = (insn >> 12) & 0xf;
         rd0 = (insn >> 16) & 0xf;
@@ -2662,7 +2676,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_movq_wRn_M0(wrd);
         gen_op_iwmmxt_set_mup();
         break;
-    case 0x01a: case 0x11a: case 0x21a: case 0x31a:	/* WSUB */
+    case 0x01a: case 0x11a: case 0x21a: case 0x31a:     /* WSUB */
     case 0x41a: case 0x51a: case 0x61a: case 0x71a:
     case 0x81a: case 0x91a: case 0xa1a: case 0xb1a:
     case 0xc1a: case 0xd1a: case 0xe1a: case 0xf1a:
@@ -2705,7 +2719,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x01e: case 0x11e: case 0x21e: case 0x31e:	/* WSHUFH */
+    case 0x01e: case 0x11e: case 0x21e: case 0x31e:     /* WSHUFH */
     case 0x41e: case 0x51e: case 0x61e: case 0x71e:
     case 0x81e: case 0x91e: case 0xa1e: case 0xb1e:
     case 0xc1e: case 0xd1e: case 0xe1e: case 0xf1e:
@@ -2719,7 +2733,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x018: case 0x118: case 0x218: case 0x318:	/* WADD */
+    case 0x018: case 0x118: case 0x218: case 0x318:     /* WADD */
     case 0x418: case 0x518: case 0x618: case 0x718:
     case 0x818: case 0x918: case 0xa18: case 0xb18:
     case 0xc18: case 0xd18: case 0xe18: case 0xf18:
@@ -2762,7 +2776,7 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         gen_op_iwmmxt_set_mup();
         gen_op_iwmmxt_set_cup();
         break;
-    case 0x008: case 0x108: case 0x208: case 0x308:	/* WPACK */
+    case 0x008: case 0x108: case 0x208: case 0x308:     /* WPACK */
     case 0x408: case 0x508: case 0x608: case 0x708:
     case 0x808: case 0x908: case 0xa08: case 0xb08:
     case 0xc08: case 0xd08: case 0xe08: case 0xf08:
@@ -2809,13 +2823,13 @@ static int disas_iwmmxt_insn(DisasContext *s, uint32_t insn)
         tmp = load_reg(s, rd0);
         tmp2 = load_reg(s, rd1);
         switch ((insn >> 16) & 0xf) {
-        case 0x0:					/* TMIA */
+        case 0x0:                                       /* TMIA */
             gen_helper_iwmmxt_muladdsl(cpu_M0, cpu_M0, tmp, tmp2);
             break;
-        case 0x8:					/* TMIAPH */
+        case 0x8:                                       /* TMIAPH */
             gen_helper_iwmmxt_muladdsw(cpu_M0, cpu_M0, tmp, tmp2);
             break;
-        case 0xc: case 0xd: case 0xe: case 0xf:		/* TMIAxy */
+        case 0xc: case 0xd: case 0xe: case 0xf:                 /* TMIAxy */
             if (insn & (1 << 16))
                 tcg_gen_shri_i32(tmp, tmp, 16);
             if (insn & (1 << 17))
@@ -2858,16 +2872,16 @@ static int disas_dsp_insn(DisasContext *s, uint32_t insn)
         tmp = load_reg(s, rd0);
         tmp2 = load_reg(s, rd1);
         switch ((insn >> 16) & 0xf) {
-        case 0x0:					/* MIA */
+        case 0x0:                                       /* MIA */
             gen_helper_iwmmxt_muladdsl(cpu_M0, cpu_M0, tmp, tmp2);
             break;
-        case 0x8:					/* MIAPH */
+        case 0x8:                                       /* MIAPH */
             gen_helper_iwmmxt_muladdsw(cpu_M0, cpu_M0, tmp, tmp2);
             break;
-        case 0xc:					/* MIABB */
-        case 0xd:					/* MIABT */
-        case 0xe:					/* MIATB */
-        case 0xf:					/* MIATT */
+        case 0xc:                                       /* MIABB */
+        case 0xd:                                       /* MIABT */
+        case 0xe:                                       /* MIATB */
+        case 0xf:                                       /* MIATT */
             if (insn & (1 << 16))
                 tcg_gen_shri_i32(tmp, tmp, 16);
             if (insn & (1 << 17))
@@ -2893,13 +2907,13 @@ static int disas_dsp_insn(DisasContext *s, uint32_t insn)
         if (acc != 0)
             return 1;
 
-        if (insn & ARM_CP_RW_BIT) {			/* MRA */
+        if (insn & ARM_CP_RW_BIT) {                     /* MRA */
             iwmmxt_load_reg(cpu_V0, acc);
             tcg_gen_extrl_i64_i32(cpu_R[rdlo], cpu_V0);
             tcg_gen_shri_i64(cpu_V0, cpu_V0, 32);
             tcg_gen_extrl_i64_i32(cpu_R[rdhi], cpu_V0);
             tcg_gen_andi_i32(cpu_R[rdhi], cpu_R[rdhi], (1 << (40 - 32)) - 1);
-        } else {					/* MAR */
+        } else {                                        /* MAR */
             tcg_gen_concat_i32_i64(cpu_V0, cpu_R[rdlo], cpu_R[rdhi]);
             iwmmxt_store_reg(cpu_V0, acc);
         }
@@ -3824,38 +3838,56 @@ static int disas_vfp_insn(DisasContext *s, uint32_t insn)
                         gen_vfp_sqrt(dp);
                         break;
                     case 4: /* vcvtb.f32.f16, vcvtb.f64.f16 */
+                    {
+                        TCGv_ptr fpst = get_fpstatus_ptr(false);
+                        TCGv_i32 ahp_mode = get_ahp_flag();
                         tmp = gen_vfp_mrs();
                         tcg_gen_ext16u_i32(tmp, tmp);
                         if (dp) {
                             gen_helper_vfp_fcvt_f16_to_f64(cpu_F0d, tmp,
-                                                           cpu_env);
+                                                           fpst, ahp_mode);
                         } else {
                             gen_helper_vfp_fcvt_f16_to_f32(cpu_F0s, tmp,
-                                                           cpu_env);
+                                                           fpst, ahp_mode);
                         }
+                        tcg_temp_free_i32(ahp_mode);
+                        tcg_temp_free_ptr(fpst);
                         tcg_temp_free_i32(tmp);
                         break;
+                    }
                     case 5: /* vcvtt.f32.f16, vcvtt.f64.f16 */
+                    {
+                        TCGv_ptr fpst = get_fpstatus_ptr(false);
+                        TCGv_i32 ahp = get_ahp_flag();
                         tmp = gen_vfp_mrs();
                         tcg_gen_shri_i32(tmp, tmp, 16);
                         if (dp) {
                             gen_helper_vfp_fcvt_f16_to_f64(cpu_F0d, tmp,
-                                                           cpu_env);
+                                                           fpst, ahp);
                         } else {
                             gen_helper_vfp_fcvt_f16_to_f32(cpu_F0s, tmp,
-                                                           cpu_env);
+                                                           fpst, ahp);
                         }
                         tcg_temp_free_i32(tmp);
+                        tcg_temp_free_i32(ahp);
+                        tcg_temp_free_ptr(fpst);
                         break;
+                    }
                     case 6: /* vcvtb.f16.f32, vcvtb.f16.f64 */
+                    {
+                        TCGv_ptr fpst = get_fpstatus_ptr(false);
+                        TCGv_i32 ahp = get_ahp_flag();
                         tmp = tcg_temp_new_i32();
+
                         if (dp) {
                             gen_helper_vfp_fcvt_f64_to_f16(tmp, cpu_F0d,
-                                                           cpu_env);
+                                                           fpst, ahp);
                         } else {
                             gen_helper_vfp_fcvt_f32_to_f16(tmp, cpu_F0s,
-                                                           cpu_env);
+                                                           fpst, ahp);
                         }
+                        tcg_temp_free_i32(ahp);
+                        tcg_temp_free_ptr(fpst);
                         gen_mov_F0_vreg(0, rd);
                         tmp2 = gen_vfp_mrs();
                         tcg_gen_andi_i32(tmp2, tmp2, 0xffff0000);
@@ -3863,15 +3895,21 @@ static int disas_vfp_insn(DisasContext *s, uint32_t insn)
                         tcg_temp_free_i32(tmp2);
                         gen_vfp_msr(tmp);
                         break;
+                    }
                     case 7: /* vcvtt.f16.f32, vcvtt.f16.f64 */
+                    {
+                        TCGv_ptr fpst = get_fpstatus_ptr(false);
+                        TCGv_i32 ahp = get_ahp_flag();
                         tmp = tcg_temp_new_i32();
                         if (dp) {
                             gen_helper_vfp_fcvt_f64_to_f16(tmp, cpu_F0d,
-                                                           cpu_env);
+                                                           fpst, ahp);
                         } else {
                             gen_helper_vfp_fcvt_f32_to_f16(tmp, cpu_F0s,
-                                                           cpu_env);
+                                                           fpst, ahp);
                         }
+                        tcg_temp_free_i32(ahp);
+                        tcg_temp_free_ptr(fpst);
                         tcg_gen_shli_i32(tmp, tmp, 16);
                         gen_mov_F0_vreg(0, rd);
                         tmp2 = gen_vfp_mrs();
@@ -3880,6 +3918,7 @@ static int disas_vfp_insn(DisasContext *s, uint32_t insn)
                         tcg_temp_free_i32(tmp2);
                         gen_vfp_msr(tmp);
                         break;
+                    }
                     case 8: /* cmp */
                         gen_vfp_cmp(dp);
                         break;
@@ -4238,7 +4277,7 @@ static void gen_goto_tb(DisasContext *s, int n, target_ulong dest)
     if (use_goto_tb(s, dest)) {
         tcg_gen_goto_tb(n);
         gen_set_pc_im(s, dest);
-        tcg_gen_exit_tb((uintptr_t)s->base.tb + n);
+        tcg_gen_exit_tb(s->base.tb, n);
     } else {
         gen_set_pc_im(s, dest);
         gen_goto_ptr();
@@ -4467,10 +4506,14 @@ static bool msr_banked_access_decode(DisasContext *s, int r, int sysm, int rn,
         }
         break;
     case ARM_CPU_MODE_HYP:
-        /* Note that we can forbid accesses from EL2 here because they
-         * must be from Hyp mode itself
+        /*
+         * SPSR_hyp and r13_hyp can only be accessed from Monitor mode
+         * (and so we can forbid accesses from EL2 or below). elr_hyp
+         * can be accessed also from Hyp mode, so forbid accesses from
+         * EL0 or EL1.
          */
-        if (!arm_dc_feature(s, ARM_FEATURE_EL2) || s->current_el < 3) {
+        if (!arm_dc_feature(s, ARM_FEATURE_EL2) || s->current_el < 2 ||
+            (s->current_el < 3 && *regno != 17)) {
             goto undef;
         }
         break;
@@ -4548,7 +4591,13 @@ static void gen_rfe(DisasContext *s, TCGv_i32 pc, TCGv_i32 cpsr)
      * appropriately depending on the new Thumb bit, so it must
      * be called after storing the new PC.
      */
+    if (tb_cflags(s->base.tb) & CF_USE_ICOUNT) {
+        gen_io_start();
+    }
     gen_helper_cpsr_write_eret(cpu_env, cpsr);
+    if (tb_cflags(s->base.tb) & CF_USE_ICOUNT) {
+        gen_io_end();
+    }
     tcg_temp_free_i32(cpsr);
     /* Must exit loop to check un-masked IRQs */
     s->base.is_jmp = DISAS_EXIT;
@@ -7216,53 +7265,70 @@ static int disas_neon_data_insn(DisasContext *s, uint32_t insn)
                     }
                     break;
                 case NEON_2RM_VCVT_F16_F32:
+                {
+                    TCGv_ptr fpst;
+                    TCGv_i32 ahp;
+
                     if (!arm_dc_feature(s, ARM_FEATURE_VFP_FP16) ||
                         q || (rm & 1)) {
                         return 1;
                     }
                     tmp = tcg_temp_new_i32();
                     tmp2 = tcg_temp_new_i32();
+                    fpst = get_fpstatus_ptr(true);
+                    ahp = get_ahp_flag();
                     tcg_gen_ld_f32(cpu_F0s, cpu_env, neon_reg_offset(rm, 0));
-                    gen_helper_neon_fcvt_f32_to_f16(tmp, cpu_F0s, cpu_env);
+                    gen_helper_vfp_fcvt_f32_to_f16(tmp, cpu_F0s, fpst, ahp);
                     tcg_gen_ld_f32(cpu_F0s, cpu_env, neon_reg_offset(rm, 1));
-                    gen_helper_neon_fcvt_f32_to_f16(tmp2, cpu_F0s, cpu_env);
+                    gen_helper_vfp_fcvt_f32_to_f16(tmp2, cpu_F0s, fpst, ahp);
                     tcg_gen_shli_i32(tmp2, tmp2, 16);
                     tcg_gen_or_i32(tmp2, tmp2, tmp);
                     tcg_gen_ld_f32(cpu_F0s, cpu_env, neon_reg_offset(rm, 2));
-                    gen_helper_neon_fcvt_f32_to_f16(tmp, cpu_F0s, cpu_env);
+                    gen_helper_vfp_fcvt_f32_to_f16(tmp, cpu_F0s, fpst, ahp);
                     tcg_gen_ld_f32(cpu_F0s, cpu_env, neon_reg_offset(rm, 3));
                     neon_store_reg(rd, 0, tmp2);
                     tmp2 = tcg_temp_new_i32();
-                    gen_helper_neon_fcvt_f32_to_f16(tmp2, cpu_F0s, cpu_env);
+                    gen_helper_vfp_fcvt_f32_to_f16(tmp2, cpu_F0s, fpst, ahp);
                     tcg_gen_shli_i32(tmp2, tmp2, 16);
                     tcg_gen_or_i32(tmp2, tmp2, tmp);
                     neon_store_reg(rd, 1, tmp2);
                     tcg_temp_free_i32(tmp);
+                    tcg_temp_free_i32(ahp);
+                    tcg_temp_free_ptr(fpst);
                     break;
+                }
                 case NEON_2RM_VCVT_F32_F16:
+                {
+                    TCGv_ptr fpst;
+                    TCGv_i32 ahp;
                     if (!arm_dc_feature(s, ARM_FEATURE_VFP_FP16) ||
                         q || (rd & 1)) {
                         return 1;
                     }
+                    fpst = get_fpstatus_ptr(true);
+                    ahp = get_ahp_flag();
                     tmp3 = tcg_temp_new_i32();
                     tmp = neon_load_reg(rm, 0);
                     tmp2 = neon_load_reg(rm, 1);
                     tcg_gen_ext16u_i32(tmp3, tmp);
-                    gen_helper_neon_fcvt_f16_to_f32(cpu_F0s, tmp3, cpu_env);
+                    gen_helper_vfp_fcvt_f16_to_f32(cpu_F0s, tmp3, fpst, ahp);
                     tcg_gen_st_f32(cpu_F0s, cpu_env, neon_reg_offset(rd, 0));
                     tcg_gen_shri_i32(tmp3, tmp, 16);
-                    gen_helper_neon_fcvt_f16_to_f32(cpu_F0s, tmp3, cpu_env);
+                    gen_helper_vfp_fcvt_f16_to_f32(cpu_F0s, tmp3, fpst, ahp);
                     tcg_gen_st_f32(cpu_F0s, cpu_env, neon_reg_offset(rd, 1));
                     tcg_temp_free_i32(tmp);
                     tcg_gen_ext16u_i32(tmp3, tmp2);
-                    gen_helper_neon_fcvt_f16_to_f32(cpu_F0s, tmp3, cpu_env);
+                    gen_helper_vfp_fcvt_f16_to_f32(cpu_F0s, tmp3, fpst, ahp);
                     tcg_gen_st_f32(cpu_F0s, cpu_env, neon_reg_offset(rd, 2));
                     tcg_gen_shri_i32(tmp3, tmp2, 16);
-                    gen_helper_neon_fcvt_f16_to_f32(cpu_F0s, tmp3, cpu_env);
+                    gen_helper_vfp_fcvt_f16_to_f32(cpu_F0s, tmp3, fpst, ahp);
                     tcg_gen_st_f32(cpu_F0s, cpu_env, neon_reg_offset(rd, 3));
                     tcg_temp_free_i32(tmp2);
                     tcg_temp_free_i32(tmp3);
+                    tcg_temp_free_i32(ahp);
+                    tcg_temp_free_ptr(fpst);
                     break;
+                }
                 case NEON_2RM_AESE: case NEON_2RM_AESMC:
                     if (!arm_dc_feature(s, ARM_FEATURE_V8_AES)
                         || ((rm | rd) & 1)) {
@@ -7700,9 +7766,10 @@ static int disas_neon_data_insn(DisasContext *s, uint32_t insn)
  */
 static int disas_neon_insn_3same_ext(DisasContext *s, uint32_t insn)
 {
-    gen_helper_gvec_3_ptr *fn_gvec_ptr;
-    int rd, rn, rm, rot, size, opr_sz;
-    TCGv_ptr fpst;
+    gen_helper_gvec_3 *fn_gvec = NULL;
+    gen_helper_gvec_3_ptr *fn_gvec_ptr = NULL;
+    int rd, rn, rm, opr_sz;
+    int data = 0;
     bool q;
 
     q = extract32(insn, 6, 1);
@@ -7715,8 +7782,8 @@ static int disas_neon_insn_3same_ext(DisasContext *s, uint32_t insn)
 
     if ((insn & 0xfe200f10) == 0xfc200800) {
         /* VCMLA -- 1111 110R R.1S .... .... 1000 ...0 .... */
-        size = extract32(insn, 20, 1);
-        rot = extract32(insn, 23, 2);
+        int size = extract32(insn, 20, 1);
+        data = extract32(insn, 23, 2); /* rot */
         if (!arm_dc_feature(s, ARM_FEATURE_V8_FCMA)
             || (!size && !arm_dc_feature(s, ARM_FEATURE_V8_FP16))) {
             return 1;
@@ -7724,13 +7791,20 @@ static int disas_neon_insn_3same_ext(DisasContext *s, uint32_t insn)
         fn_gvec_ptr = size ? gen_helper_gvec_fcmlas : gen_helper_gvec_fcmlah;
     } else if ((insn & 0xfea00f10) == 0xfc800800) {
         /* VCADD -- 1111 110R 1.0S .... .... 1000 ...0 .... */
-        size = extract32(insn, 20, 1);
-        rot = extract32(insn, 24, 1);
+        int size = extract32(insn, 20, 1);
+        data = extract32(insn, 24, 1); /* rot */
         if (!arm_dc_feature(s, ARM_FEATURE_V8_FCMA)
             || (!size && !arm_dc_feature(s, ARM_FEATURE_V8_FP16))) {
             return 1;
         }
         fn_gvec_ptr = size ? gen_helper_gvec_fcadds : gen_helper_gvec_fcaddh;
+    } else if ((insn & 0xfeb00f00) == 0xfc200d00) {
+        /* V[US]DOT -- 1111 1100 0.10 .... .... 1101 .Q.U .... */
+        bool u = extract32(insn, 4, 1);
+        if (!arm_dc_feature(s, ARM_FEATURE_V8_DOTPROD)) {
+            return 1;
+        }
+        fn_gvec = u ? gen_helper_gvec_udot_b : gen_helper_gvec_sdot_b;
     } else {
         return 1;
     }
@@ -7745,12 +7819,19 @@ static int disas_neon_insn_3same_ext(DisasContext *s, uint32_t insn)
     }
 
     opr_sz = (1 + q) * 8;
-    fpst = get_fpstatus_ptr(1);
-    tcg_gen_gvec_3_ptr(vfp_reg_offset(1, rd),
-                       vfp_reg_offset(1, rn),
-                       vfp_reg_offset(1, rm), fpst,
-                       opr_sz, opr_sz, rot, fn_gvec_ptr);
-    tcg_temp_free_ptr(fpst);
+    if (fn_gvec_ptr) {
+        TCGv_ptr fpst = get_fpstatus_ptr(1);
+        tcg_gen_gvec_3_ptr(vfp_reg_offset(1, rd),
+                           vfp_reg_offset(1, rn),
+                           vfp_reg_offset(1, rm), fpst,
+                           opr_sz, opr_sz, data, fn_gvec_ptr);
+        tcg_temp_free_ptr(fpst);
+    } else {
+        tcg_gen_gvec_3_ool(vfp_reg_offset(1, rd),
+                           vfp_reg_offset(1, rn),
+                           vfp_reg_offset(1, rm),
+                           opr_sz, opr_sz, data, fn_gvec);
+    }
     return 0;
 }
 
@@ -7764,26 +7845,52 @@ static int disas_neon_insn_3same_ext(DisasContext *s, uint32_t insn)
 
 static int disas_neon_insn_2reg_scalar_ext(DisasContext *s, uint32_t insn)
 {
-    int rd, rn, rm, rot, size, opr_sz;
-    TCGv_ptr fpst;
+    gen_helper_gvec_3 *fn_gvec = NULL;
+    gen_helper_gvec_3_ptr *fn_gvec_ptr = NULL;
+    int rd, rn, rm, opr_sz, data;
     bool q;
 
     q = extract32(insn, 6, 1);
     VFP_DREG_D(rd, insn);
     VFP_DREG_N(rn, insn);
-    VFP_DREG_M(rm, insn);
     if ((rd | rn) & q) {
         return 1;
     }
 
     if ((insn & 0xff000f10) == 0xfe000800) {
         /* VCMLA (indexed) -- 1111 1110 S.RR .... .... 1000 ...0 .... */
-        rot = extract32(insn, 20, 2);
-        size = extract32(insn, 23, 1);
-        if (!arm_dc_feature(s, ARM_FEATURE_V8_FCMA)
-            || (!size && !arm_dc_feature(s, ARM_FEATURE_V8_FP16))) {
+        int rot = extract32(insn, 20, 2);
+        int size = extract32(insn, 23, 1);
+        int index;
+
+        if (!arm_dc_feature(s, ARM_FEATURE_V8_FCMA)) {
             return 1;
         }
+        if (size == 0) {
+            if (!arm_dc_feature(s, ARM_FEATURE_V8_FP16)) {
+                return 1;
+            }
+            /* For fp16, rm is just Vm, and index is M.  */
+            rm = extract32(insn, 0, 4);
+            index = extract32(insn, 5, 1);
+        } else {
+            /* For fp32, rm is the usual M:Vm, and index is 0.  */
+            VFP_DREG_M(rm, insn);
+            index = 0;
+        }
+        data = (index << 2) | rot;
+        fn_gvec_ptr = (size ? gen_helper_gvec_fcmlas_idx
+                       : gen_helper_gvec_fcmlah_idx);
+    } else if ((insn & 0xffb00f00) == 0xfe200d00) {
+        /* V[US]DOT -- 1111 1110 0.10 .... .... 1101 .Q.U .... */
+        int u = extract32(insn, 4, 1);
+        if (!arm_dc_feature(s, ARM_FEATURE_V8_DOTPROD)) {
+            return 1;
+        }
+        fn_gvec = u ? gen_helper_gvec_udot_idx_b : gen_helper_gvec_sdot_idx_b;
+        /* rm is just Vm, and index is M.  */
+        data = extract32(insn, 5, 1); /* index */
+        rm = extract32(insn, 0, 4);
     } else {
         return 1;
     }
@@ -7798,14 +7905,19 @@ static int disas_neon_insn_2reg_scalar_ext(DisasContext *s, uint32_t insn)
     }
 
     opr_sz = (1 + q) * 8;
-    fpst = get_fpstatus_ptr(1);
-    tcg_gen_gvec_3_ptr(vfp_reg_offset(1, rd),
-                       vfp_reg_offset(1, rn),
-                       vfp_reg_offset(1, rm), fpst,
-                       opr_sz, opr_sz, rot,
-                       size ? gen_helper_gvec_fcmlas_idx
-                       : gen_helper_gvec_fcmlah_idx);
-    tcg_temp_free_ptr(fpst);
+    if (fn_gvec_ptr) {
+        TCGv_ptr fpst = get_fpstatus_ptr(1);
+        tcg_gen_gvec_3_ptr(vfp_reg_offset(1, rd),
+                           vfp_reg_offset(1, rn),
+                           vfp_reg_offset(1, rm), fpst,
+                           opr_sz, opr_sz, data, fn_gvec_ptr);
+        tcg_temp_free_ptr(fpst);
+    } else {
+        tcg_gen_gvec_3_ool(vfp_reg_offset(1, rd),
+                           vfp_reg_offset(1, rn),
+                           vfp_reg_offset(1, rm),
+                           opr_sz, opr_sz, data, fn_gvec);
+    }
     return 0;
 }
 
@@ -8372,6 +8484,22 @@ static void gen_srs(DisasContext *s,
     s->base.is_jmp = DISAS_UPDATE;
 }
 
+/* Generate a label used for skipping this instruction */
+static void arm_gen_condlabel(DisasContext *s)
+{
+    if (!s->condjmp) {
+        s->condlabel = gen_new_label();
+        s->condjmp = 1;
+    }
+}
+
+/* Skip this instruction if the ARM condition is false */
+static void arm_skip_unless(DisasContext *s, uint32_t cond)
+{
+    arm_gen_condlabel(s);
+    arm_gen_test_cc(cond ^ 1, s->condlabel);
+}
+
 static void disas_arm_insn(DisasContext *s, unsigned int insn)
 {
     unsigned int cond, val, op1, i, shift, rm, rs, rn, rd, sh;
@@ -8601,9 +8729,7 @@ static void disas_arm_insn(DisasContext *s, unsigned int insn)
     if (cond != 0xe) {
         /* if not always execute, we generate a conditional jump to
            next instruction */
-        s->condlabel = gen_new_label();
-        arm_gen_test_cc(cond ^ 1, s->condlabel);
-        s->condjmp = 1;
+        arm_skip_unless(s, cond);
     }
     if ((insn & 0x0f900000) == 0x03000000) {
         if ((insn & (1 << 21)) == 0) {
@@ -8774,6 +8900,25 @@ static void disas_arm_insn(DisasContext *s, unsigned int insn)
                 gen_helper_add_saturate(tmp, cpu_env, tmp, tmp2);
             tcg_temp_free_i32(tmp2);
             store_reg(s, rd, tmp);
+            break;
+        case 0x6: /* ERET */
+            if (op1 != 3) {
+                goto illegal_op;
+            }
+            if (!arm_dc_feature(s, ARM_FEATURE_V7VE)) {
+                goto illegal_op;
+            }
+            if ((insn & 0x000fff0f) != 0x0000000e) {
+                /* UNPREDICTABLE; we choose to UNDEF */
+                goto illegal_op;
+            }
+
+            if (s->current_el == 2) {
+                tmp = load_cpu_field(elr_el[2]);
+            } else {
+                tmp = load_reg(s, 14);
+            }
+            gen_exception_return(s, tmp);
             break;
         case 7:
         {
@@ -9843,7 +9988,13 @@ static void disas_arm_insn(DisasContext *s, unsigned int insn)
                 if (exc_return) {
                     /* Restore CPSR from SPSR.  */
                     tmp = load_cpu_field(spsr);
+                    if (tb_cflags(s->base.tb) & CF_USE_ICOUNT) {
+                        gen_io_start();
+                    }
                     gen_helper_cpsr_write_eret(cpu_env, tmp);
+                    if (tb_cflags(s->base.tb) & CF_USE_ICOUNT) {
+                        gen_io_end();
+                    }
                     tcg_temp_free_i32(tmp);
                     /* Must exit loop to check un-masked IRQs */
                     s->base.is_jmp = DISAS_EXIT;
@@ -9911,14 +10062,15 @@ static bool thumb_insn_is_16bit(DisasContext *s, uint32_t insn)
      * end up actually treating this as two 16-bit insns, though,
      * if it's half of a bl/blx pair that might span a page boundary.
      */
-    if (arm_dc_feature(s, ARM_FEATURE_THUMB2)) {
+    if (arm_dc_feature(s, ARM_FEATURE_THUMB2) ||
+        arm_dc_feature(s, ARM_FEATURE_M)) {
         /* Thumb2 cores (including all M profile ones) always treat
          * 32-bit insns as 32-bit.
          */
         return false;
     }
 
-    if ((insn >> 11) == 0x1e && (s->pc < s->next_page_start - 3)) {
+    if ((insn >> 11) == 0x1e && s->pc - s->page_start < TARGET_PAGE_SIZE - 3) {
         /* 0b1111_0xxx_xxxx_xxxx : BL/BLX prefix, and the suffix
          * is not on the next page; we merge this into a 32-bit
          * insn.
@@ -10031,10 +10183,38 @@ static void disas_thumb2_insn(DisasContext *s, uint32_t insn)
     int conds;
     int logic_cc;
 
-    /* The only 32 bit insn that's allowed for Thumb1 is the combined
-     * BL/BLX prefix and suffix.
+    /*
+     * ARMv6-M supports a limited subset of Thumb2 instructions.
+     * Other Thumb1 architectures allow only 32-bit
+     * combined BL/BLX prefix and suffix.
      */
-    if ((insn & 0xf800e800) != 0xf000e800) {
+    if (arm_dc_feature(s, ARM_FEATURE_M) &&
+        !arm_dc_feature(s, ARM_FEATURE_V7)) {
+        int i;
+        bool found = false;
+        static const uint32_t armv6m_insn[] = {0xf3808000 /* msr */,
+                                               0xf3b08040 /* dsb */,
+                                               0xf3b08050 /* dmb */,
+                                               0xf3b08060 /* isb */,
+                                               0xf3e08000 /* mrs */,
+                                               0xf000d000 /* bl */};
+        static const uint32_t armv6m_mask[] = {0xffe0d000,
+                                               0xfff0d0f0,
+                                               0xfff0d0f0,
+                                               0xfff0d0f0,
+                                               0xffe0d000,
+                                               0xf800d000};
+
+        for (i = 0; i < ARRAY_SIZE(armv6m_insn); i++) {
+            if ((insn & armv6m_mask[i]) == armv6m_insn[i]) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            goto illegal_op;
+        }
+    } else if ((insn & 0xf800e800) != 0xf000e800)  {
         ARCH(6T2);
     }
 
@@ -10783,8 +10963,23 @@ static void disas_thumb2_insn(DisasContext *s, uint32_t insn)
         /* Coprocessor.  */
         if (arm_dc_feature(s, ARM_FEATURE_M)) {
             /* We don't currently implement M profile FP support,
-             * so this entire space should give a NOCP fault.
+             * so this entire space should give a NOCP fault, with
+             * the exception of the v8M VLLDM and VLSTM insns, which
+             * must be NOPs in Secure state and UNDEF in Nonsecure state.
              */
+            if (arm_dc_feature(s, ARM_FEATURE_V8) &&
+                (insn & 0xffa00f00) == 0xec200a00) {
+                /* 0b1110_1100_0x1x_xxxx_xxxx_1010_xxxx_xxxx
+                 *  - VLLDM, VLSTM
+                 * We choose to UNDEF if the RAZ bits are non-zero.
+                 */
+                if (!s->v8m_secure || (insn & 0x0040f0ff)) {
+                    goto illegal_op;
+                }
+                /* Just NOP since FP support is not implemented */
+                break;
+            }
+            /* All other insns: NOCP */
             gen_exception_insn(s, 4, EXCP_NOCP, syn_uncategorized(),
                                default_exception_el(s));
             break;
@@ -10940,7 +11135,10 @@ static void disas_thumb2_insn(DisasContext *s, uint32_t insn)
                         }
                         break;
                     case 3: /* Special control operations.  */
-                        ARCH(7);
+                        if (!arm_dc_feature(s, ARM_FEATURE_V7) &&
+                            !arm_dc_feature(s, ARM_FEATURE_M)) {
+                            goto illegal_op;
+                        }
                         op = (insn >> 4) & 0xf;
                         switch (op) {
                         case 2: /* clrex */
@@ -10979,8 +11177,16 @@ static void disas_thumb2_insn(DisasContext *s, uint32_t insn)
                         if (rn != 14 || rd != 15) {
                             goto illegal_op;
                         }
-                        tmp = load_reg(s, rn);
-                        tcg_gen_subi_i32(tmp, tmp, insn & 0xff);
+                        if (s->current_el == 2) {
+                            /* ERET from Hyp uses ELR_Hyp, not LR */
+                            if (insn & 0xff) {
+                                goto illegal_op;
+                            }
+                            tmp = load_cpu_field(elr_el[2]);
+                        } else {
+                            tmp = load_reg(s, rn);
+                            tcg_gen_subi_i32(tmp, tmp, insn & 0xff);
+                        }
                         gen_exception_return(s, tmp);
                         break;
                     case 6: /* MRS */
@@ -11044,9 +11250,7 @@ static void disas_thumb2_insn(DisasContext *s, uint32_t insn)
                 /* Conditional branch.  */
                 op = (insn >> 22) & 0xf;
                 /* Generate a conditional jump to next instruction.  */
-                s->condlabel = gen_new_label();
-                arm_gen_test_cc(op ^ 1, s->condlabel);
-                s->condjmp = 1;
+                arm_skip_unless(s, op);
 
                 /* offset[11:1] = insn[10:0] */
                 offset = (insn & 0x7ff) << 1;
@@ -11970,8 +12174,7 @@ static void disas_thumb_insn(DisasContext *s, uint32_t insn)
         case 1: case 3: case 9: case 11: /* czb */
             rm = insn & 7;
             tmp = load_reg(s, rm);
-            s->condlabel = gen_new_label();
-            s->condjmp = 1;
+            arm_gen_condlabel(s);
             if (insn & (1 << 11))
                 tcg_gen_brcondi_i32(TCG_COND_EQ, tmp, 0, s->condlabel);
             else
@@ -12134,9 +12337,7 @@ static void disas_thumb_insn(DisasContext *s, uint32_t insn)
             break;
         }
         /* generate a conditional jump to next instruction */
-        s->condlabel = gen_new_label();
-        arm_gen_test_cc(cond ^ 1, s->condlabel);
-        s->condjmp = 1;
+        arm_skip_unless(s, cond);
 
         /* jump to the offset */
         val = (uint32_t)s->pc + 2;
@@ -12216,8 +12417,7 @@ static bool insn_crosses_page(CPUARMState *env, DisasContext *s)
     return !thumb_insn_is_16bit(s, insn);
 }
 
-static int arm_tr_init_disas_context(DisasContextBase *dcbase,
-                                     CPUState *cs, int max_insns)
+static void arm_tr_init_disas_context(DisasContextBase *dcbase, CPUState *cs)
 {
     DisasContext *dc = container_of(dcbase, DisasContext, base);
     CPUARMState *env = cs->env_ptr;
@@ -12274,19 +12474,18 @@ static int arm_tr_init_disas_context(DisasContextBase *dcbase,
     dc->is_ldex = false;
     dc->ss_same_el = false; /* Can't be true since EL_d must be AArch64 */
 
-    dc->next_page_start =
-        (dc->base.pc_first & TARGET_PAGE_MASK) + TARGET_PAGE_SIZE;
+    dc->page_start = dc->base.pc_first & TARGET_PAGE_MASK;
 
     /* If architectural single step active, limit to 1.  */
     if (is_singlestepping(dc)) {
-        max_insns = 1;
+        dc->base.max_insns = 1;
     }
 
     /* ARM is a fixed-length ISA.  Bound the number of insns to execute
        to those left on the page.  */
     if (!dc->thumb) {
-        int bound = (dc->next_page_start - dc->base.pc_first) / 4;
-        max_insns = MIN(max_insns, bound);
+        int bound = -(dc->base.pc_first | TARGET_PAGE_MASK) / 4;
+        dc->base.max_insns = MIN(dc->base.max_insns, bound);
     }
 
     cpu_F0s = tcg_temp_new_i32();
@@ -12297,8 +12496,6 @@ static int arm_tr_init_disas_context(DisasContextBase *dcbase,
     cpu_V1 = cpu_F1d;
     /* FIXME: cpu_M0 can probably be the same as cpu_V0.  */
     cpu_M0 = tcg_temp_new_i64();
-
-    return max_insns;
 }
 
 static void arm_tr_tb_start(DisasContextBase *dcbase, CPUState *cpu)
@@ -12519,9 +12716,7 @@ static void thumb_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu)
         uint32_t cond = dc->condexec_cond;
 
         if (cond != 0x0e) {     /* Skip conditional when condition is AL. */
-            dc->condlabel = gen_new_label();
-            arm_gen_test_cc(cond ^ 1, dc->condlabel);
-            dc->condjmp = 1;
+            arm_skip_unless(dc, cond);
         }
     }
 
@@ -12557,8 +12752,8 @@ static void thumb_tr_translate_insn(DisasContextBase *dcbase, CPUState *cpu)
      * but isn't very efficient).
      */
     if (dc->base.is_jmp == DISAS_NEXT
-        && (dc->pc >= dc->next_page_start
-            || (dc->pc >= dc->next_page_start - 3
+        && (dc->pc - dc->page_start >= TARGET_PAGE_SIZE
+            || (dc->pc - dc->page_start >= TARGET_PAGE_SIZE - 3
                 && insn_crosses_page(env, dc)))) {
         dc->base.is_jmp = DISAS_TOO_MANY;
     }
@@ -12634,7 +12829,7 @@ static void arm_tr_tb_stop(DisasContextBase *dcbase, CPUState *cpu)
             /* fall through */
         default:
             /* indicate that the hash table must be used to find the next TB */
-            tcg_gen_exit_tb(0);
+            tcg_gen_exit_tb(NULL, 0);
             break;
         case DISAS_NORETURN:
             /* nothing more to generate */
@@ -12649,7 +12844,7 @@ static void arm_tr_tb_stop(DisasContextBase *dcbase, CPUState *cpu)
             /* The helper doesn't necessarily throw an exception, but we
              * must go back to the main loop to check for interrupts anyway.
              */
-            tcg_gen_exit_tb(0);
+            tcg_gen_exit_tb(NULL, 0);
             break;
         }
         case DISAS_WFE:
