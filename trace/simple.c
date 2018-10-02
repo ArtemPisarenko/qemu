@@ -17,6 +17,11 @@
 #include "trace/simple.h"
 #include "qemu/error-report.h"
 
+/* Activates dumb hack with polling and usleep() to prevent event drops
+ * without performance penalty in normal conditions
+ */
+#define HACK_PREVENT_EVENT_DROPS
+
 /** Trace file header event ID, picked to avoid conflict with real event IDs */
 #define HEADER_EVENT_ID (~(uint64_t)0)
 
@@ -215,17 +220,33 @@ int trace_record_start(TraceBufferRecord *rec, uint32_t event, size_t datasize)
     uint64_t event_u64 = event;
     uint64_t timestamp_ns = get_clock();
 
+#ifdef HACK_PREVENT_EVENT_DROPS
+bool do_wait_writeout;
+do {
+    do_wait_writeout = false;
+#endif
     do {
         old_idx = g_atomic_int_get(&trace_idx);
         smp_rmb();
         new_idx = old_idx + rec_len;
 
         if (new_idx - writeout_idx > TRACE_BUF_LEN) {
+#ifndef HACK_PREVENT_EVENT_DROPS
             /* Trace Buffer Full, Event dropped ! */
             g_atomic_int_inc(&dropped_events);
             return -ENOSPC;
+#else
+            /* Trace Buffer Full, but it's a shame to drop event ! */
+            do_wait_writeout = true;
+            break;
+#endif
         }
     } while (!g_atomic_int_compare_and_exchange(&trace_idx, old_idx, new_idx));
+#ifdef HACK_PREVENT_EVENT_DROPS
+    if (do_wait_writeout)
+        g_usleep(100);
+} while (do_wait_writeout);
+#endif
 
     idx = old_idx % TRACE_BUF_LEN;
 
