@@ -167,6 +167,9 @@ static inline tcg_target_ulong cpu_tb_exec(CPUState *cpu, TranslationBlock *itb)
     }
 #endif /* DEBUG_DISAS */
 
+    if (TRACE_EXEC_TB_ICOUNT_GUEST_ENABLED && use_icount)
+    	trace_exec_tb_icount_guest(cpu_get_icount(), itb->pc);
+
     cpu->can_do_io = !use_icount;
     ret = tcg_qemu_tb_exec(env, tb_ptr);
     cpu->can_do_io = 1;

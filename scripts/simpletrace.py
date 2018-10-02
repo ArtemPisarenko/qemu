@@ -133,6 +133,9 @@ class Analyzer(object):
     If a method matching a trace event name exists, it is invoked to process
     that trace record.  Otherwise the catchall() method is invoked.
 
+    If dropped events found, Dropped_Event(num_events_dropped) method is invoked.
+    By default it prints warning to stderr, if itsn't redefined in subclass.
+
     Example:
     The following method handles the runstate_set(int new_state) trace event::
 
@@ -160,6 +163,11 @@ class Analyzer(object):
 
     def catchall(self, event, rec):
         """Called if no specific method for processing a trace event has been found."""
+        pass
+
+    def Dropped_Event(self, num_events_dropped):
+        import sys
+        sys.stderr.write('Warning: %s dropped events detected\n' % str(num_events_dropped))
         pass
 
     def end(self):
