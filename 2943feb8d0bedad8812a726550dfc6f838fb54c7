@@ -1,0 +1,3 @@
+v2:
+- timer creation/initialize functions reworked and and their unnecessary variants removed (as Paolo Bonzini suggested)
+- also their comments improved to avoid info duplication
