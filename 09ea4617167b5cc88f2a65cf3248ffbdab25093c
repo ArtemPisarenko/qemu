@@ -1,0 +1,3 @@
+Conversion and association between QEMUTimerAttrBit and accessor macro are dumb.
+Maybe better alternatives exist (like QFlags in Qt framework) or existing qemu code may be reused, if any.
+Attributes also may be better named as flags, but they looks like something volatile, whereas 'attribute' expresses constant nature better.
