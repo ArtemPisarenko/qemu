@@ -1,0 +1,3 @@
+qemu-timer.c:
+Note that checking procedure also consider checkpoint to be reduntant in case if there are no pending virtual timers at all.
+I don't expect that this condition ever possible, but if it is, then checkpoint will be skipped, although it seems ok for me.
