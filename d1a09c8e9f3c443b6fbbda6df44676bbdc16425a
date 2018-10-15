@@ -1,4 +1,4 @@
-v2: fixed race condition in qemu-timer.c by reimplementing synchronization with checkpointing
+v2: fixed race condition in qemu-timer.c by reimplementing synchronization between checkpointing and timers processing
 
 qemu-timer.c:
 There are one more difference from original behavior, which I'm not sure about.
