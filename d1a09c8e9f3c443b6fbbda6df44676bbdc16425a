@@ -1,0 +1,3 @@
+qemu-timer.c:
+There are one more difference from previous behavior, which I'm not sure about.
+When there are no timers processed for virtual clock (i.e. timer list is empty), then checkpointing will also be skipped. Is this scenario possible at all?
