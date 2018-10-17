@@ -1,0 +1,5 @@
+v2: fixes race condition and reimplements synchronization between checkpointing and timers processing in qemu-timer.c
+
+qemu-timer.c:
+It has one more difference from original behavior, which I'm not sure about.
+If there are no timers will be processed for virtual clock (i.e. timer list is empty), then checkpointing will be skipped, although it looks fine for me. Is such scenario ever possible?
