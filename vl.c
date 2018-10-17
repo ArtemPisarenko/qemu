@@ -841,6 +841,11 @@ int qemu_timedate_diff(struct tm *tm)
         seconds = mktime(&tmp);
         break;
     }
+    default:
+        /* gcc complains: ‘seconds’ may be used uninitialized */
+        g_assert_not_reached();
+        seconds = -1;
+        break;
     }
 
     return seconds - qemu_ref_timedate(QEMU_CLOCK_HOST);
