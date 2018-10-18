@@ -1,3 +1,7 @@
+v3:
+- attributes has been properly incapsulated to qemu-timer (as suggested by Stefan Hajnoczi)
+- attributes definition and docs refactored to avoid extra enum (as suggested by Stefan Hajnoczi and Paolo Bonzini)
+
 v2:
 - timer creation/initialize functions reworked and and their unnecessary variants removed (as Paolo Bonzini suggested)
 - also their comments improved to avoid info duplication
