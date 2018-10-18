@@ -1,6 +1,7 @@
 v3:
 - attributes has been properly incapsulated to qemu-timer (as suggested by Stefan Hajnoczi)
 - attributes definition and docs refactored to avoid extra enum and use simple macros with explicit bit positions (as suggested by Stefan Hajnoczi and Paolo Bonzini)
+- fixed old "QEMU_TIMER_ATTR(id)" notation (in comments) left from initial patch version
 
 v2:
 - timer creation/initialize functions reworked and and their unnecessary variants removed (as Paolo Bonzini suggested)
