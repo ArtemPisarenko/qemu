@@ -1,0 +1,1 @@
+v2: fixes race condition and reimplements synchronization between checkpointing and timers processing in qemu-timer.c
