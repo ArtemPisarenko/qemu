@@ -25,6 +25,9 @@
 #include "net/queue.h"
 #include "qemu/queue.h"
 #include "net/net.h"
+#ifdef HACK_NETDEV_SYNC
+#include "sysemu/sysemu.h"
+#endif
 
 /* The delivery handler may only return zero if it will call
  * qemu_net_queue_flush() when it determines that it is once again able
@@ -99,6 +102,12 @@ static void qemu_net_queue_append(NetQueue *queue,
 {
     NetPacket *packet;
 
+#ifdef HACK_NETDEV_SYNC //TODO: make conditional
+    if (runstate_is_running()) {
+        assert(sender->info->type != NET_CLIENT_DRIVER_NIC);
+    }
+#endif
+
     if (queue->nq_count >= queue->nq_maxlen && !sent_cb) {
         return; /* drop if queue full and no callback */
     }
@@ -123,6 +132,12 @@ void qemu_net_queue_append_iov(NetQueue *queue,
     NetPacket *packet;
     size_t max_len = 0;
     int i;
+
+#ifdef HACK_NETDEV_SYNC //TODO: make conditional
+    if (runstate_is_running()) {
+        assert(sender->info->type != NET_CLIENT_DRIVER_NIC);
+    }
+#endif
 
     if (queue->nq_count >= queue->nq_maxlen && !sent_cb) {
         return; /* drop if queue full and no callback */

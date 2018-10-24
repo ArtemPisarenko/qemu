@@ -65,6 +65,9 @@ static void net_socket_read_poll(NetSocketState *s, bool enable)
 
 static void net_socket_write_poll(NetSocketState *s, bool enable)
 {
+#ifdef HACK_NETDEV_SYNC //TODO: make conditional
+    assert(!enable);
+#endif
     s->write_poll = enable;
     net_socket_update_fd_handler(s);
 }
@@ -159,7 +162,11 @@ static void net_socket_send(void *opaque)
     uint8_t buf1[NET_BUFSIZE];
     const uint8_t *buf;
 
+#ifndef HACK_NETDEV_SYNC
     size = qemu_recv(s->fd, buf1, sizeof(buf1), 0);
+#else
+    size = qemu_recv(s->fd, buf1, sizeof(buf1), MSG_DONTWAIT);
+#endif
     if (size < 0) {
         if (errno != EWOULDBLOCK)
             goto eoc;
@@ -194,7 +201,11 @@ static void net_socket_send_dgram(void *opaque)
     NetSocketState *s = opaque;
     int size;
 
+#ifndef HACK_NETDEV_SYNC
     size = qemu_recv(s->fd, s->rs.buf, sizeof(s->rs.buf), 0);
+#else
+    size = qemu_recv(s->fd, s->rs.buf, sizeof(s->rs.buf), MSG_DONTWAIT);
+#endif
     if (size < 0)
         return;
     if (size == 0) {
@@ -294,7 +305,9 @@ static int net_socket_mcast_create(struct sockaddr_in *mcastaddr,
         }
     }
 
+#ifndef HACK_NETDEV_SYNC //TODO: make conditional
     qemu_set_nonblock(fd);
+#endif
     return fd;
 fail:
     if (fd >= 0)
@@ -554,7 +567,9 @@ static int net_socket_connect_init(NetClientState *peer,
         error_setg_errno(errp, errno, "can't create stream socket");
         return -1;
     }
+#ifndef HACK_NETDEV_SYNC //TODO: make conditional
     qemu_set_nonblock(fd);
+#endif
 
     connected = 0;
     for(;;) {
@@ -672,7 +687,9 @@ static int net_socket_udp_init(NetClientState *peer,
         closesocket(fd);
         return -1;
     }
+#ifndef HACK_NETDEV_SYNC //TODO: make conditional
     qemu_set_nonblock(fd);
+#endif
 
     s = net_socket_fd_init(peer, model, name, fd, 0, NULL, errp);
     if (!s) {
@@ -714,7 +731,11 @@ int net_init_socket(const Netdev *netdev, const char *name,
         if (fd == -1) {
             return -1;
         }
+#ifdef HACK_NETDEV_SYNC //TODO: make conditional
+        qemu_set_block(fd);
+#else
         qemu_set_nonblock(fd);
+#endif
         if (!net_socket_fd_init(peer, "socket", name, fd, 1, sock->mcast,
                                 errp)) {
             return -1;

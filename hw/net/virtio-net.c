@@ -2016,8 +2016,12 @@ static void virtio_net_device_realize(DeviceState *dev, Error **errp)
     }
     n->vqs = g_malloc0(sizeof(VirtIONetQueue) * n->max_queues);
     n->curr_queues = 1;
+#ifdef HACK_NETDEV_SYNC //TODO: make conditional
+    n->net_conf.txtimer = 0;
+#endif
     n->tx_timeout = n->net_conf.txtimer;
 
+#ifndef HACK_NETDEV_SYNC //TODO: make conditional
     if (n->net_conf.tx && strcmp(n->net_conf.tx, "timer")
                        && strcmp(n->net_conf.tx, "bh")) {
         error_report("virtio-net: "
@@ -2025,6 +2029,9 @@ static void virtio_net_device_realize(DeviceState *dev, Error **errp)
                      n->net_conf.tx);
         error_report("Defaulting to \"bh\"");
     }
+#else
+    n->net_conf.tx = (char *)"timer";
+#endif
 
     n->net_conf.tx_queue_size = MIN(virtio_net_max_tx_queue_size(n),
                                     n->net_conf.tx_queue_size);
@@ -2104,6 +2111,9 @@ static void virtio_net_device_unrealize(DeviceState *dev, Error **errp)
     timer_free(n->announce_timer);
     g_free(n->vqs);
     qemu_del_nic(n->nic);
+#ifdef HACK_NETDEV_SYNC //TODO: remove / make conditional ?
+    n->net_conf.tx = NULL;
+#endif
     virtio_cleanup(vdev);
 }
 

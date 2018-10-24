@@ -198,7 +198,6 @@ int tap_open(char *ifname, int ifname_size, int *vnet_hdr,
             return -1;
         }
     }
-    fcntl(fd, F_SETFL, O_NONBLOCK);
     return fd;
 }
 

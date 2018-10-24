@@ -95,6 +95,12 @@ static int net_hub_port_can_receive(NetClientState *nc)
     NetHubPort *src_port = DO_UPCAST(NetHubPort, nc, nc);
     NetHub *hub = src_port->hub;
 
+#ifdef HACK_NETDEV_SYNC //TODO: make conditional
+    if (nc->peer && (nc->peer->info->type == NET_CLIENT_DRIVER_NIC)) {
+        return 1;
+    }
+#endif
+
     QLIST_FOREACH(port, &hub->ports, next) {
         if (port == src_port) {
             continue;

@@ -529,6 +529,12 @@ int qemu_can_send_packet(NetClientState *sender)
         return 1;
     }
 
+#ifdef HACK_NETDEV_FE_DROP_INPUT //TODO: make conditional
+    if (sender->peer->info->type == NET_CLIENT_DRIVER_NIC) {
+        return 1;
+    }
+#endif
+
     if (sender->peer->receive_disabled) {
         return 0;
     } else if (sender->peer->info->can_receive &&
@@ -717,6 +723,12 @@ ssize_t qemu_deliver_packet_iov(NetClientState *sender,
     if (nc->link_down) {
         return iov_size(iov, iovcnt);
     }
+
+#ifdef HACK_NETDEV_FE_DROP_INPUT //TODO: make conditional
+    if (nc->info->type == NET_CLIENT_DRIVER_NIC) {
+        return iov_size(iov, iovcnt);
+    }
+#endif
 
     if (nc->receive_disabled) {
         return 0;
@@ -1360,6 +1372,7 @@ void qmp_set_link(const char *name, bool up, Error **errp)
         nc->info->link_status_changed(nc);
     }
 
+#ifndef HACK_NETDEV_FE_DROP_INPUT //TODO: make conditional
     if (nc->peer) {
         /* Change peer link only if the peer is NIC and then notify peer.
          * If the peer is a HUBPORT or a backend, we do not change the
@@ -1378,6 +1391,7 @@ void qmp_set_link(const char *name, bool up, Error **errp)
             nc->peer->info->link_status_changed(nc->peer);
         }
     }
+#endif
 }
 
 static void net_vm_change_state_handler(void *opaque, int running,

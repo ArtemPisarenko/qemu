@@ -1,6 +1,9 @@
 #ifndef QEMU_NET_H
 #define QEMU_NET_H
 
+#define HACK_NETDEV_SYNC //TODO: merge to global option(sync)
+#define HACK_NETDEV_FE_DROP_INPUT //TODO: convert to netdev parameter(fe_drop_input)
+
 #include "qemu/queue.h"
 #include "qapi/qapi-types-net.h"
 #include "net/queue.h"

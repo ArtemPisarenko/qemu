@@ -679,6 +679,12 @@ static ssize_t tap_receive(NetClientState *nc, const uint8_t *buf, size_t size)
 {
     TAPState *s = DO_UPCAST(TAPState, nc, nc);
 
+#ifdef HACK_NETDEV_SYNC // see below
+/* FIXME: it could be removed if feature based on external_sim, which
+ *        already doesn't support windows, otherwise...
+ */
+#error tap netdev sync isn't supported on windows
+#endif
     return tap_win32_write(s->handle, buf, size);
 }
 

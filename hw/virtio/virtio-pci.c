@@ -2421,12 +2421,14 @@ static const TypeInfo virtio_serial_pci_info = {
 
 /* virtio-net-pci */
 
+#if 0 //TODO: restore and force IOEVENTFD off globally...
 static Property virtio_net_properties[] = {
     DEFINE_PROP_BIT("ioeventfd", VirtIOPCIProxy, flags,
                     VIRTIO_PCI_FLAG_USE_IOEVENTFD_BIT, true),
     DEFINE_PROP_UINT32("vectors", VirtIOPCIProxy, nvectors, 3),
     DEFINE_PROP_END_OF_LIST(),
 };
+#endif
 
 static void virtio_net_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
 {
@@ -2452,7 +2454,9 @@ static void virtio_net_pci_class_init(ObjectClass *klass, void *data)
     k->revision = VIRTIO_PCI_ABI_VERSION;
     k->class_id = PCI_CLASS_NETWORK_ETHERNET;
     set_bit(DEVICE_CATEGORY_NETWORK, dc->categories);
+#if 0 //TODO: restore
     dc->props = virtio_net_properties;
+#endif
     vpciklass->realize = virtio_net_pci_realize;
 }
 
