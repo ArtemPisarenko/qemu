@@ -19,6 +19,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu-common.h"
+#include "sysemu/sysemu.h"
 #include "sysemu/bt.h"
 #include "qemu/main-loop.h"
 
@@ -185,6 +186,8 @@ struct HCIInfo *bt_host_hci(const char *id)
     s->hci.bdaddr_set = bt_host_bdaddr_set;
 
     qemu_set_fd_handler(s->fd, bt_host_read, NULL, s);
+
+    warn_unsupported_qemu_io_sync("bluetooth host backend");
 
     return &s->hci;
 }

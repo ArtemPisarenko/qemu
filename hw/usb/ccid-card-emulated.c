@@ -31,6 +31,7 @@
 
 #include "qemu/thread.h"
 #include "qemu/main-loop.h"
+#include "sysemu/sysemu.h"
 #include "ccid.h"
 #include "qapi/error.h"
 
@@ -544,6 +545,12 @@ static void emulated_realize(CCIDCardState *base, Error **errp)
                        card, QEMU_THREAD_JOINABLE);
 }
 
+static void emulated_instance_initfn(Object *obj)
+{
+    (void)obj;
+    warn_unsupported_qemu_io_sync("ccid card backend");
+}
+
 static void emulated_unrealize(CCIDCardState *base, Error **errp)
 {
     EmulatedState *card = EMULATED_CCID_CARD(base);
@@ -592,6 +599,7 @@ static const TypeInfo emulated_card_info = {
     .parent        = TYPE_CCID_CARD,
     .instance_size = sizeof(EmulatedState),
     .class_init    = emulated_class_initfn,
+    .instance_init = emulated_instance_initfn,
 };
 
 static void ccid_card_emulated_register_types(void)

@@ -154,15 +154,6 @@ static void netmap_writable(void *opaque)
     qemu_flush_queued_packets(&s->nc);
 }
 
-#ifdef HACK_NETDEV_SYNC
-static void netmap_warn_async(void)
-{
-    warn_report_once("netmap network backend queued tx packet "
-                     " (breaking guest deterministic execution)");
-    g_assert_not_reached();
-}
-#endif
-
 static ssize_t netmap_receive(NetClientState *nc,
       const uint8_t *buf, size_t size)
 {
@@ -184,9 +175,6 @@ static ssize_t netmap_receive(NetClientState *nc,
     }
 
     if (nm_ring_empty(ring)) {
-#ifdef HACK_NETDEV_SYNC //TODO: make conditional
-        netmap_warn_async();
-#endif
         /* No available slots in the netmap TX ring. */
         netmap_write_poll(s, true);
         return 0;
@@ -224,9 +212,6 @@ static ssize_t netmap_receive_iov(NetClientState *nc,
     last = i = ring->cur;
 
     if (nm_ring_space(ring) < iovcnt) {
-#ifdef HACK_NETDEV_SYNC //TODO: make conditional
-        netmap_warn_async();
-#endif
         /* Not enough netmap slots. */
         netmap_write_poll(s, true);
         return 0;
@@ -243,9 +228,6 @@ static ssize_t netmap_receive_iov(NetClientState *nc,
             nm_frag_size = MIN(iov_frag_size, ring->nr_buf_size);
 
             if (unlikely(nm_ring_empty(ring))) {
-#ifdef HACK_NETDEV_SYNC //TODO: make conditional
-                netmap_warn_async();
-#endif
                 /* We run out of netmap slots while splitting the
                    iovec fragments. */
                 netmap_write_poll(s, true);
@@ -460,10 +442,7 @@ int net_init_netmap(const Netdev *netdev,
     pstrcpy(s->ifname, sizeof(s->ifname), netmap_opts->ifname);
     netmap_read_poll(s, true); /* Initially only poll for reads. */
 
-#ifdef HACK_NETDEV_SYNC //TODO: make conditional
-    warn_report_once("netmap network backend doesn't support"
-                         " operating in sync mode");
-#endif
+    warn_unsupported_qemu_io_sync("netmap network backend");
 
     return 0;
 }

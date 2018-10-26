@@ -9,6 +9,7 @@
 #include "qemu/main-loop.h"
 #include "qemu/bitmap.h"
 #include "qemu/uuid.h"
+#include "qemu/error-report.h"
 #include "qom/object.h"
 
 /* vl.c */
@@ -17,6 +18,16 @@ extern const char *bios_name;
 extern const char *qemu_name;
 extern QemuUUID qemu_uuid;
 extern bool qemu_uuid_set;
+extern bool qemu_io_sync;
+
+#define warn_unsupported_qemu_io_sync(backend_fmt, ...)                      \
+    ({                                                                       \
+        if (qemu_io_sync) {                                                  \
+            warn_report_once(backend_fmt ": operating in icount iosync mode" \
+                             " isn't supported",                             \
+                             ##__VA_ARGS__);                                 \
+        }                                                                    \
+    })
 
 bool runstate_check(RunState state);
 void runstate_set(RunState new_state);

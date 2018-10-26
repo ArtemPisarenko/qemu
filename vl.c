@@ -197,6 +197,8 @@ uint8_t qemu_extra_params_fw[2];
 
 int icount_align_option;
 
+bool qemu_io_sync = false;
+
 /* The bytes in qemu_uuid are in the order specified by RFC4122, _not_ in the
  * little-endian "wire format" described in the SMBIOS 2.6 specification.
  */
@@ -503,6 +505,9 @@ static QemuOptsList qemu_icount_opts = {
         }, {
             .name = "rrsnapshot",
             .type = QEMU_OPT_STRING,
+        }, {
+            .name = "iosync",
+            .type = QEMU_OPT_BOOL,
         },
         { /* end of list */ }
     },
@@ -1512,6 +1517,30 @@ static int machine_help_func(QemuOpts *opts, MachineState *machine)
     }
 
     return 1;
+}
+
+/***********************************************************/
+/* global option controlling I/O behavior in icount mode */
+
+static void configure_qemu_io_sync(QemuOpts *opts)
+{
+    Location loc;
+
+    if (!opts) {
+        return;
+    }
+
+    loc_push_none(&loc);
+    qemu_opts_loc_restore(opts);
+
+    qemu_io_sync = qemu_opt_get_bool(opts, "iosync", false);
+
+    if (qemu_io_sync && qemu_opt_get(opts, "rr")) {
+        error_report("icount options iosync=on and rr are incompatible");
+        exit(1);
+    }
+
+    loc_pop(&loc);
 }
 
 /***********************************************************/
@@ -3987,6 +4016,8 @@ int main(int argc, char **argv, char **envp)
 
     replay_configure(icount_opts);
 
+    configure_qemu_io_sync(icount_opts);
+
     if (incoming && !preconfig_exit_requested) {
         error_report("'preconfig' and 'incoming' options are "
                      "mutually exclusive");
@@ -4376,6 +4407,10 @@ int main(int argc, char **argv, char **envp)
         semihosting_arg_fallback(kernel_filename, kernel_cmdline);
     }
 
+    if (semihosting_enabled()) {
+        warn_unsupported_qemu_io_sync("semihosting host I/O");
+    }
+
     os_set_line_buffering();
 
     /* spice needs the timers to be initialized by this point */
@@ -4504,6 +4539,9 @@ int main(int argc, char **argv, char **envp)
     }
     if (vga_model) {
         select_vgahw(vga_model);
+    }
+    if (!nographic && (vga_interface_type != VGA_NONE)) {
+        warn_unsupported_qemu_io_sync("display and keyboard/mouse input");
     }
 
     if (watchdog) {

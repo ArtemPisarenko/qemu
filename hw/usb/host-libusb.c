@@ -1072,6 +1072,8 @@ static void usb_host_instance_init(Object *obj)
     USBDevice *udev = USB_DEVICE(obj);
     USBHostDevice *s = USB_HOST_DEVICE(udev);
 
+    warn_unsupported_qemu_io_sync("usb host backend");
+
     device_add_bootindex_property(obj, &s->bootindex,
                                   "bootindex", NULL,
                                   &udev->qdev, NULL);

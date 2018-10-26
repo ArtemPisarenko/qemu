@@ -25,6 +25,7 @@
 #include "qapi/qapi-commands-rocker.h"
 #include "qemu/iov.h"
 #include "qemu/bitops.h"
+#include "sysemu/sysemu.h"
 
 #include "rocker.h"
 #include "rocker_hw.h"
@@ -1426,6 +1427,12 @@ err_world_type_by_name:
     }
 }
 
+static void rocker_instance_init(Object *obj)
+{
+    (void)obj;
+    warn_unsupported_qemu_io_sync("rocker switch");
+}
+
 static void pci_rocker_uninit(PCIDevice *dev)
 {
     Rocker *r = ROCKER(dev);
@@ -1526,6 +1533,7 @@ static const TypeInfo rocker_info = {
     .parent        = TYPE_PCI_DEVICE,
     .instance_size = sizeof(Rocker),
     .class_init    = rocker_class_init,
+    .instance_init = rocker_instance_init,
     .interfaces = (InterfaceInfo[]) {
         { INTERFACE_CONVENTIONAL_PCI_DEVICE },
         { },

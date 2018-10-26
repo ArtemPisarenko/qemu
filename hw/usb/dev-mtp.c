@@ -22,6 +22,7 @@
 
 #include "qemu-common.h"
 #include "qemu/iov.h"
+#include "sysemu/sysemu.h"
 #include "trace.h"
 #include "hw/usb.h"
 #include "desc.h"
@@ -2038,6 +2039,12 @@ static void usb_mtp_realize(USBDevice *dev, Error **errp)
 
 }
 
+static void usb_mtp_instance_initfn(Object *obj)
+{
+    (void)obj;
+    warn_unsupported_qemu_io_sync("usb mtp backend");
+}
+
 static const VMStateDescription vmstate_usb_mtp = {
     .name = "usb-mtp",
     .unmigratable = 1,
@@ -2081,6 +2088,7 @@ static TypeInfo mtp_info = {
     .parent        = TYPE_USB_DEVICE,
     .instance_size = sizeof(MTPState),
     .class_init    = usb_mtp_class_initfn,
+    .instance_init = usb_mtp_instance_initfn,
 };
 
 static void usb_mtp_register_types(void)

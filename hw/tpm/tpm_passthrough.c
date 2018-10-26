@@ -26,6 +26,7 @@
 #include "qemu-common.h"
 #include "qemu/error-report.h"
 #include "qemu/sockets.h"
+#include "sysemu/sysemu.h"
 #include "sysemu/tpm_backend.h"
 #include "tpm_int.h"
 #include "hw/hw.h"
@@ -351,6 +352,8 @@ static void tpm_passthrough_inst_init(Object *obj)
     tpm_pt->options = g_new0(TPMPassthroughOptions, 1);
     tpm_pt->tpm_fd = -1;
     tpm_pt->cancel_fd = -1;
+
+    warn_unsupported_qemu_io_sync("TPM passthrough backend");
 }
 
 static void tpm_passthrough_inst_finalize(Object *obj)

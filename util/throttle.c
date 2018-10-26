@@ -25,8 +25,10 @@
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "qemu/throttle.h"
+#include "qemu/throttle-options.h"
 #include "qemu/timer.h"
 #include "block/aio.h"
+#include "sysemu/sysemu.h"
 
 /* This function make a bucket leak
  *
@@ -223,6 +225,8 @@ void throttle_init(ThrottleState *ts)
 {
     memset(ts, 0, sizeof(ThrottleState));
     throttle_config_init(&ts->cfg);
+    warn_unsupported_qemu_io_sync("backend configured with "
+                                  THROTTLE_OPT_PREFIX "* options");
 }
 
 /* To be called first on the ThrottleTimers */

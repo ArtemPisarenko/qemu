@@ -842,6 +842,8 @@ static int blk_do_attach_dev(BlockBackend *blk, void *dev)
         return -EBUSY;
     }
 
+    warn_unsupported_qemu_io_sync("blockdev(drive) backend");
+
     /* While migration is still incoming, we don't need to apply the
      * permissions of guest device BlockBackends. We might still have a block
      * job or NBD server writing to the image for storage migration. */

@@ -1773,6 +1773,7 @@ static int audio_driver_init (AudioState *s, struct audio_driver *drv)
         audio_init_nb_voices_out (drv);
         audio_init_nb_voices_in (drv);
         s->drv = drv;
+        warn_unsupported_qemu_io_sync("audio backend");
         return 0;
     }
     else {

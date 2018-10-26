@@ -1157,6 +1157,8 @@ static void ivshmem_doorbell_init(Object *obj)
     s->features |= (1 << IVSHMEM_MSI);
     s->legacy_size = SIZE_MAX;  /* whatever the server sends */
     s->not_legacy_32bit = 1;
+
+    warn_unsupported_qemu_io_sync("ivshmem doorbell backend");
 }
 
 static void ivshmem_doorbell_realize(PCIDevice *dev, Error **errp)

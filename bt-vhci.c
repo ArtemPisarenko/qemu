@@ -19,6 +19,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu-common.h"
+#include "sysemu/sysemu.h"
 #include "sysemu/bt.h"
 #include "hw/bt.h"
 #include "qemu/main-loop.h"
@@ -165,4 +166,6 @@ void bt_vhci_init(struct HCIInfo *info)
     s->info->acl_recv = vhci_out_hci_packet_acl;
 
     qemu_set_fd_handler(s->fd, vhci_read, NULL, s);
+
+    warn_unsupported_qemu_io_sync("bluetooth vhci backend");
 }
