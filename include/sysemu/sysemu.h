@@ -20,10 +20,12 @@ extern QemuUUID qemu_uuid;
 extern bool qemu_uuid_set;
 extern bool qemu_io_sync;
 
+#define QEMU_IOSYNC_MODE_NAME "icount iosync mode"
 #define warn_unsupported_qemu_io_sync(backend_fmt, ...)                      \
     ({                                                                       \
         if (qemu_io_sync) {                                                  \
-            warn_report_once(backend_fmt ": operating in icount iosync mode" \
+            warn_report_once(backend_fmt                                     \
+                             ": operating in " QEMU_IOSYNC_MODE_NAME         \
                              " isn't supported",                             \
                              ##__VA_ARGS__);                                 \
         }                                                                    \

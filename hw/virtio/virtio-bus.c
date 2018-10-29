@@ -178,7 +178,7 @@ int virtio_bus_grab_ioeventfd(VirtioBusState *bus)
     /* vhost can be used even if ioeventfd=off in the proxy device,
      * so do not check k->ioeventfd_enabled.
      */
-    if (!k->ioeventfd_assign) {
+    if (qemu_io_sync || !k->ioeventfd_assign) {
         return -ENOSYS;
     }
 
@@ -211,7 +211,7 @@ int virtio_bus_start_ioeventfd(VirtioBusState *bus)
     VirtioDeviceClass *vdc = VIRTIO_DEVICE_GET_CLASS(vdev);
     int r;
 
-    if (!k->ioeventfd_assign || !k->ioeventfd_enabled(proxy)) {
+    if (qemu_io_sync || !k->ioeventfd_assign || !k->ioeventfd_enabled(proxy)) {
         return -ENOSYS;
     }
     if (bus->ioeventfd_started) {
@@ -253,6 +253,10 @@ bool virtio_bus_ioeventfd_enabled(VirtioBusState *bus)
     VirtioBusClass *k = VIRTIO_BUS_GET_CLASS(bus);
     DeviceState *proxy = DEVICE(BUS(bus)->parent);
 
+    if (qemu_io_sync) {
+        return false;
+    }
+
     return k->ioeventfd_assign && k->ioeventfd_enabled(proxy);
 }
 
@@ -269,7 +273,7 @@ int virtio_bus_set_host_notifier(VirtioBusState *bus, int n, bool assign)
     EventNotifier *notifier = virtio_queue_get_host_notifier(vq);
     int r = 0;
 
-    if (!k->ioeventfd_assign) {
+    if (qemu_io_sync || !k->ioeventfd_assign) {
         return -ENOSYS;
     }
 

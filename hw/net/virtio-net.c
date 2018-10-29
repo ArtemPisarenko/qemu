@@ -1952,6 +1952,7 @@ static void virtio_net_device_realize(DeviceState *dev, Error **errp)
     VirtIONet *n = VIRTIO_NET(dev);
     NetClientState *nc;
     int i;
+    const char *default_tx_value;
 
     if (n->net_conf.mtu) {
         n->host_features |= (1ULL << VIRTIO_NET_F_MTU);
@@ -2016,22 +2017,28 @@ static void virtio_net_device_realize(DeviceState *dev, Error **errp)
     }
     n->vqs = g_malloc0(sizeof(VirtIONetQueue) * n->max_queues);
     n->curr_queues = 1;
-#ifdef HACK_NETDEV_SYNC //TODO: make conditional
-    n->net_conf.txtimer = 0;
-#endif
     n->tx_timeout = n->net_conf.txtimer;
 
-#ifndef HACK_NETDEV_SYNC //TODO: make conditional
     if (n->net_conf.tx && strcmp(n->net_conf.tx, "timer")
                        && strcmp(n->net_conf.tx, "bh")) {
         error_report("virtio-net: "
                      "Unknown option tx=%s, valid options: \"timer\" \"bh\"",
                      n->net_conf.tx);
-        error_report("Defaulting to \"bh\"");
+        if (!qemu_io_sync) {
+            default_tx_value = "bh";
+        } else {
+            default_tx_value = "timer";
+        }
+        error_report("Defaulting to \"%s\"", default_tx_value);
+        object_property_set_str(OBJECT(n), default_tx_value, "tx", NULL);
     }
-#else
-    n->net_conf.tx = (char *)"timer";
-#endif
+
+    if (qemu_io_sync
+            && !((n->net_conf.txtimer == 0)
+            && ((!n->net_conf.tx) || (strcmp(n->net_conf.tx, "timer") == 0)))) {
+        error_setg(errp, "in "QEMU_IOSYNC_MODE_NAME" these options are fixed: "
+                         "tx=\"timer\", x-txtimer=0");
+    }
 
     n->net_conf.tx_queue_size = MIN(virtio_net_max_tx_queue_size(n),
                                     n->net_conf.tx_queue_size);
@@ -2111,9 +2118,6 @@ static void virtio_net_device_unrealize(DeviceState *dev, Error **errp)
     timer_free(n->announce_timer);
     g_free(n->vqs);
     qemu_del_nic(n->nic);
-#ifdef HACK_NETDEV_SYNC //TODO: remove / make conditional ?
-    n->net_conf.tx = NULL;
-#endif
     virtio_cleanup(vdev);
 }
 
@@ -2126,6 +2130,10 @@ static void virtio_net_instance_init(Object *obj)
      * Can be overriden with virtio_net_set_config_size.
      */
     n->config_size = sizeof(struct virtio_net_config);
+    if (qemu_io_sync) {
+        object_property_set_str(obj, "timer", "tx", NULL);
+        object_property_set_int(obj, 0, "x-txtimer", NULL);
+    }
     device_add_bootindex_property(obj, &n->nic_conf.bootindex,
                                   "bootindex", "/ethernet-phy@0",
                                   DEVICE(n), NULL);
