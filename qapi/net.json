@@ -65,7 +65,7 @@
 #
 ##
 { 'command': 'netdev_add',
-  'data': {'type': 'str', 'id': 'str'},
+  'data': {'type': 'str', 'id': 'str', '*dropguestinput': 'bool'},
   'gen': false }                # so we can get the additional arguments
 
 ##
@@ -464,7 +464,7 @@
 # 'l2tpv3' - since 2.1
 ##
 { 'union': 'Netdev',
-  'base': { 'id': 'str', 'type': 'NetClientDriver' },
+  'base': { 'id': 'str', 'type': 'NetClientDriver', '*dropguestinput': 'bool' },
   'discriminator': 'type',
   'data': {
     'nic':      'NetLegacyNicOptions',

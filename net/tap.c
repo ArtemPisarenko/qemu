@@ -106,9 +106,7 @@ static ssize_t tap_write_packet(TAPState *s, const struct iovec *iov, int iovcnt
     } while (len == -1 && errno == EINTR);
 
     if (len == -1 && errno == EAGAIN) {
-#ifdef HACK_NETDEV_SYNC //TODO: make conditional
-        g_assert_not_reached();
-#endif
+        assert(!qemu_io_sync);
         tap_write_poll(s, true);
         return 0;
     }
@@ -210,12 +208,14 @@ static void tap_send(void *opaque)
             break;
         }
 
-#ifdef HACK_NETDEV_SYNC //TODO: make conditional
-        /* FIXME: this is because I didn't found lightweight way
-         *        to prevent tap_read_packet() from blocking
-         */
-        break;
-#endif
+        if (qemu_io_sync) {
+            /* FIXME: This is because I didn't found lightweight way
+             * to prevent tap_read_packet() from blocking.
+             * Also it assumes that first call of this function cannot block
+             * after tap fd became readable.
+             */
+            break;
+        }
 
         /*
          * When the host keeps receiving more packets while tap_send() is
@@ -602,9 +602,9 @@ int net_init_bridge(const Netdev *netdev, const char *name,
         return -1;
     }
 
-#ifndef HACK_NETDEV_SYNC //TODO: make conditional
-    fcntl(fd, F_SETFL, O_NONBLOCK);
-#endif
+    if (!qemu_io_sync) {
+        fcntl(fd, F_SETFL, O_NONBLOCK);
+    }
     vnet_hdr = tap_probe_vnet_hdr(fd);
     s = net_tap_fd_init(peer, "bridge", name, fd, vnet_hdr);
 
@@ -635,9 +635,9 @@ static int net_tap_init(const NetdevTapOptions *tap, int *vnet_hdr,
         return -1;
     }
 
-#ifndef HACK_NETDEV_SYNC //TODO: make conditional
-    fcntl(fd, F_SETFL, O_NONBLOCK);
-#endif
+    if (!qemu_io_sync) {
+        fcntl(fd, F_SETFL, O_NONBLOCK);
+    }
 
     if (setup_script &&
         setup_script[0] != '\0' &&
@@ -807,9 +807,9 @@ int net_init_tap(const Netdev *netdev, const char *name,
             return -1;
         }
 
-#ifndef HACK_NETDEV_SYNC //TODO: make conditional
-        fcntl(fd, F_SETFL, O_NONBLOCK);
-#endif
+        if (!qemu_io_sync) {
+            fcntl(fd, F_SETFL, O_NONBLOCK);
+        }
 
         vnet_hdr = tap_probe_vnet_hdr(fd);
 
@@ -857,9 +857,9 @@ int net_init_tap(const Netdev *netdev, const char *name,
                 goto free_fail;
             }
 
-#ifndef HACK_NETDEV_SYNC //TODO: make conditional
-            fcntl(fd, F_SETFL, O_NONBLOCK);
-#endif
+            if (!qemu_io_sync) {
+                fcntl(fd, F_SETFL, O_NONBLOCK);
+            }
 
             if (i == 0) {
                 vnet_hdr = tap_probe_vnet_hdr(fd);
@@ -907,9 +907,9 @@ free_fail:
             return -1;
         }
 
-#ifndef HACK_NETDEV_SYNC //TODO: make conditional
-        fcntl(fd, F_SETFL, O_NONBLOCK);
-#endif
+        if (!qemu_io_sync) {
+            fcntl(fd, F_SETFL, O_NONBLOCK);
+        }
         vnet_hdr = tap_probe_vnet_hdr(fd);
 
         net_init_tap_one(tap, peer, "bridge", name, ifname,

@@ -679,12 +679,6 @@ static ssize_t tap_receive(NetClientState *nc, const uint8_t *buf, size_t size)
 {
     TAPState *s = DO_UPCAST(TAPState, nc, nc);
 
-#ifdef HACK_NETDEV_SYNC // see below
-/* FIXME: it could be removed if feature based on external_sim, which
- *        already doesn't support windows, otherwise...
- */
-#error tap netdev sync isn't supported on windows
-#endif
     return tap_win32_write(s->handle, buf, size);
 }
 
@@ -805,6 +799,12 @@ int net_init_tap(const Netdev *netdev, const char *name,
 
     if (!tap->has_ifname) {
         error_report("tap: no interface name");
+        return -1;
+    }
+
+    if (qemu_io_sync) {
+        /* limited by current tap_win32_write() implementation */
+        error_report("tap win32 isn't compatible with " QEMU_IOSYNC_MODE_NAME);
         return -1;
     }
 

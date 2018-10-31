@@ -15,7 +15,6 @@
 #include "hw/virtio/vhost-user.h"
 #include "chardev/char-fe.h"
 #include "qapi/error.h"
-#include "qapi/qapi-commands-net.h"
 #include "qemu/config-file.h"
 #include "qemu/error-report.h"
 #include "qemu/option.h"
@@ -222,7 +221,7 @@ static void chr_closed_bh(void *opaque)
 
     s = DO_UPCAST(NetVhostUserState, nc, ncs[0]);
 
-    qmp_set_link(name, false, &err);
+    qemu_set_link(name, false, &err);
     vhost_user_stop(queues, ncs);
 
     qemu_chr_fe_set_handlers(&s->chr, NULL, NULL, net_vhost_user_event,
@@ -258,7 +257,7 @@ static void net_vhost_user_event(void *opaque, int event)
         }
         s->watch = qemu_chr_fe_add_watch(&s->chr, G_IO_HUP,
                                          net_vhost_user_watch, s);
-        qmp_set_link(name, true, &err);
+        qemu_set_link(name, true, &err);
         s->started = true;
         break;
     case CHR_EVENT_CLOSED:

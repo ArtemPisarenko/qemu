@@ -34,6 +34,7 @@
 #include "qemu/sockets.h"
 #include "qemu/iov.h"
 #include "qemu/main-loop.h"
+#include "sysemu/sysemu.h"
 
 
 /* The buffer size needs to be investigated for optimum numbers and
@@ -258,9 +259,9 @@ static ssize_t net_l2tpv3_receive_dgram_iov(NetClientState *nc,
             ret = 0;
         }
     }
-#ifdef HACK_NETDEV_SYNC //TODO: make conditional
-    assert(ret != 0);
-#endif
+    if (qemu_io_sync) {
+        assert(ret != 0);
+    }
     return ret;
 }
 
@@ -306,9 +307,9 @@ static ssize_t net_l2tpv3_receive_dgram(NetClientState *nc,
             ret = 0;
         }
     }
-#ifdef HACK_NETDEV_SYNC //TODO: make conditional
-    assert(ret != 0);
-#endif
+    if (qemu_io_sync) {
+        assert(ret != 0);
+    }
     return ret;
 }
 
@@ -727,9 +728,9 @@ int net_init_l2tpv3(const Netdev *netdev,
     s->vec = g_new(struct iovec, MAX_L2TPV3_IOVCNT);
     s->header_buf = g_malloc(s->header_size);
 
-#ifndef HACK_NETDEV_SYNC //TODO: make conditional
-    qemu_set_nonblock(fd);
-#endif
+    if (!qemu_io_sync) {
+        qemu_set_nonblock(fd);
+    }
 
     s->fd = fd;
     s->counter = 0;

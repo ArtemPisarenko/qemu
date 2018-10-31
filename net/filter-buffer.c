@@ -67,9 +67,6 @@ static ssize_t filter_buffer_receive_iov(NetFilterState *nf,
 {
     FilterBufferState *s = FILTER_BUFFER(nf);
 
-#ifdef HACK_NETDEV_FE_DROP_INPUT
-    //TODO: in next comment replace ".can_receive()" with "qemu_can_send_packet()"?
-#endif
     /*
      * We return size when buffer a packet, the sender will take it as
      * a already sent packet, so sent_cb should not be called later.

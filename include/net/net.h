@@ -1,9 +1,6 @@
 #ifndef QEMU_NET_H
 #define QEMU_NET_H
 
-#define HACK_NETDEV_SYNC //TODO: merge to global option(sync)
-#define HACK_NETDEV_FE_DROP_INPUT //TODO: convert to netdev parameter(fe_drop_input)
-
 #include "qemu/queue.h"
 #include "qapi/qapi-types-net.h"
 #include "net/queue.h"
@@ -87,6 +84,7 @@ typedef struct NetClientInfo {
 
 struct NetClientState {
     NetClientInfo *info;
+    bool drop_nic_peer_rx;
     int link_down;
     QTAILQ_ENTRY(NetClientState) next;
     NetClientState *peer;
@@ -144,6 +142,7 @@ void *qemu_get_nic_opaque(NetClientState *nc);
 void qemu_del_net_client(NetClientState *nc);
 typedef void (*qemu_nic_foreach)(NICState *nic, void *opaque);
 void qemu_foreach_nic(qemu_nic_foreach func, void *opaque);
+void qemu_set_link(const char *name, bool up, Error **errp);
 int qemu_can_send_packet(NetClientState *nc);
 ssize_t qemu_sendv_packet(NetClientState *nc, const struct iovec *iov,
                           int iovcnt);

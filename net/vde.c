@@ -58,9 +58,9 @@ static ssize_t vde_receive(NetClientState *nc, const uint8_t *buf, size_t size)
       ret = vde_send(s->vde, (const char *)buf, size, 0);
     } while (ret < 0 && errno == EINTR);
 
-#ifdef HACK_NETDEV_SYNC //TODO: make conditional
-    assert(ret != 0);
-#endif
+    if (qemu_io_sync) {
+        assert(ret != 0);
+    }
 
     return ret;
 }
@@ -110,12 +110,12 @@ static int net_vde_init(NetClientState *peer, const char *model,
 
     s->vde = vde;
 
-#ifdef HACK_NETDEV_SYNC //TODO: make conditional
-    /* FIXME: it isn't documented whether we're allowed to do so, but
-     *        I consider it to be better than relying on undefined behavior
-     */
-    qemu_set_block(vde_datafd(s->vde));
-#endif
+    if (qemu_io_sync) {
+        /* FIXME: It isn't documented whether we're allowed to do so, but
+         * it would considered be better than relying on undefined behavior.
+         */
+        qemu_set_block(vde_datafd(s->vde));
+    }
 
     qemu_set_fd_handler(vde_datafd(s->vde), vde_to_qemu, NULL, s);
 

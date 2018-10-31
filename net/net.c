@@ -529,11 +529,10 @@ int qemu_can_send_packet(NetClientState *sender)
         return 1;
     }
 
-#ifdef HACK_NETDEV_FE_DROP_INPUT //TODO: make conditional
-    if (sender->peer->info->type == NET_CLIENT_DRIVER_NIC) {
+    if (sender->drop_nic_peer_rx
+        && (sender->peer->info->type == NET_CLIENT_DRIVER_NIC)) {
         return 1;
     }
-#endif
 
     if (sender->peer->receive_disabled) {
         return 0;
@@ -724,11 +723,9 @@ ssize_t qemu_deliver_packet_iov(NetClientState *sender,
         return iov_size(iov, iovcnt);
     }
 
-#ifdef HACK_NETDEV_FE_DROP_INPUT //TODO: make conditional
-    if (nc->info->type == NET_CLIENT_DRIVER_NIC) {
+    if (sender->drop_nic_peer_rx && (nc->info->type == NET_CLIENT_DRIVER_NIC)) {
         return iov_size(iov, iovcnt);
     }
-#endif
 
     if (nc->receive_disabled) {
         return 0;
@@ -1066,6 +1063,18 @@ static int net_client_init1(const void *object, bool is_netdev, Error **errp)
         }
         return -1;
     }
+
+    if (is_netdev && netdev->has_dropguestinput && netdev->dropguestinput) {
+        /* Option isn't supported for legacy (-net) syntax due to
+         * massive modifications through all init path required to access
+         * NetClientState unambiguously
+         * (when no 'id'/'name' option was provided along with this option).
+          */
+        NetClientState *nc = qemu_find_netdev(netdev->id);
+        assert(nc);
+        nc->drop_nic_peer_rx = true;
+    }
+
     return 0;
 }
 
@@ -1347,7 +1356,7 @@ void hmp_info_network(Monitor *mon, const QDict *qdict)
     }
 }
 
-void qmp_set_link(const char *name, bool up, Error **errp)
+static void net_set_link(const char *name, bool up, bool qmp, Error **errp)
 {
     NetClientState *ncs[MAX_QUEUE_NUM];
     NetClientState *nc;
@@ -1364,16 +1373,21 @@ void qmp_set_link(const char *name, bool up, Error **errp)
     }
     nc = ncs[0];
 
-    for (i = 0; i < queues; i++) {
-        ncs[i]->link_down = !up;
+    if (qmp || (nc->info->type != NET_CLIENT_DRIVER_NIC)) {
+        for (i = 0; i < queues; i++) {
+            ncs[i]->link_down = !up;
+        }
+
+        if (nc->info->link_status_changed) {
+            nc->info->link_status_changed(nc);
+        }
     }
 
-    if (nc->info->link_status_changed) {
-        nc->info->link_status_changed(nc);
-    }
-
-#ifndef HACK_NETDEV_FE_DROP_INPUT //TODO: make conditional
     if (nc->peer) {
+        if (!qmp && nc->drop_nic_peer_rx
+            && (nc->peer->info->type == NET_CLIENT_DRIVER_NIC)) {
+            return;
+        }
         /* Change peer link only if the peer is NIC and then notify peer.
          * If the peer is a HUBPORT or a backend, we do not change the
          * link status.
@@ -1391,7 +1405,16 @@ void qmp_set_link(const char *name, bool up, Error **errp)
             nc->peer->info->link_status_changed(nc->peer);
         }
     }
-#endif
+}
+
+void qemu_set_link(const char *name, bool up, Error **errp)
+{
+    net_set_link(name, up, false, errp);
+}
+
+void qmp_set_link(const char *name, bool up, Error **errp)
+{
+    net_set_link(name, up, true, errp);
 }
 
 static void net_vm_change_state_handler(void *opaque, int running,
