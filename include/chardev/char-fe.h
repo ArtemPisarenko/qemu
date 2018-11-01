@@ -17,7 +17,6 @@ struct CharBackend {
     void *opaque;
     int tag;
     int fe_open;
-    bool mux_context;
     QEMUTimer *fe_deffered_open_timer;
     bool is_guest_device;
 };

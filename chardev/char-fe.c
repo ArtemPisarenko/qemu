@@ -271,7 +271,6 @@ bool qemu_chr_fe_init(CharBackend *b, Chardev *s, Error **errp)
     b->chr_can_read = NULL;
     b->chr_read = NULL;
     b->chr_event = NULL;
-    b->mux_context = false;
     b->fe_deffered_open_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
                                              fe_generate_open_event, b);
     b->is_guest_device = true;
@@ -343,6 +342,7 @@ void qemu_chr_fe_set_handlers(CharBackend *b,
 {
     Chardev *s;
     int fe_open;
+    static __thread bool mux_reentered;
 
     s = b->chr;
     if (!s) {
@@ -355,7 +355,7 @@ void qemu_chr_fe_set_handlers(CharBackend *b,
     } else {
         fe_open = 1;
     }
-    if (fe_input_allowed(s, b) || b->mux_context) {
+    if (fe_input_allowed(s, b) || mux_reentered) {
         b->chr_can_read = fd_can_read;
         b->chr_read = fd_read;
     } else {
@@ -374,22 +374,25 @@ void qemu_chr_fe_set_handlers(CharBackend *b,
 
     if (fe_open) {
         qemu_chr_fe_take_focus(b);
-        if (!fe_openclose_event_is_async(s, b) && !b->mux_context) {
-            timer_mod(b->fe_deffered_open_timer,
-                      qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL));
-        } else if (s->be_open) {
-            /* We're connecting to an already opened device, so let's make sure
-               we also get the open event */
-            qemu_chr_be_event(s, CHR_EVENT_OPENED);
+        if (!mux_reentered) {
+            if (!fe_openclose_event_is_async(s, b)) {
+                timer_mod(b->fe_deffered_open_timer,
+                          qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL));
+            } else if (s->be_open) {
+                /* We're connecting to an already opened device, so let's make
+                 * sure we also get the open event
+                 * (hack: except when chardev is muxed) */
+                qemu_chr_be_event(s, CHR_EVENT_OPENED);
+            }
         }
-    } else if (!fe_openclose_event_is_async(s, b) && !b->mux_context) {
+    } else if (!fe_openclose_event_is_async(s, b) && !mux_reentered) {
     	timer_del(b->fe_deffered_open_timer);
     }
 
     if (CHARDEV_IS_MUX(s)) {
-        MUX_CHARDEV(s)->chr.mux_context = true;
-        mux_chr_set_handlers(s, context);
-        MUX_CHARDEV(s)->chr.mux_context = false;
+        mux_reentered = true;
+        mux_chr_set_handlers(s, fe_open, context);
+        mux_reentered = false;
     }
 }
 
