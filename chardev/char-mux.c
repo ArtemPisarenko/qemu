@@ -118,15 +118,7 @@ static void mux_print_help(Chardev *chr)
 
 static void mux_chr_send_event(MuxChardev *d, int mux_nr, int event)
 {
-    CharBackend *be = d->backends[mux_nr];
-
-#ifdef HACK_CHARDEV_SYNC
-    qemu_chr_fe_event(be, event);
-#else
-    if (be && be->chr_event) {
-        be->chr_event(be->opaque, event);
-    }
-#endif
+    qemu_chr_fe_event(d->backends[mux_nr], event);
 }
 
 static void mux_chr_be_event(Chardev *chr, int event)
@@ -333,6 +325,7 @@ static void qemu_chr_open_mux(Chardev *chr,
      */
     *be_opened = machine_init_done;
     qemu_chr_fe_init(&d->chr, drv, errp);
+    qemu_chr_fe_mark_non_guest_device(&d->chr);
 }
 
 static void qemu_chr_parse_mux(QemuOpts *opts, ChardevBackend *backend,

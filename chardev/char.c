@@ -48,17 +48,7 @@ static Object *get_chardevs_root(void)
 
 static void chr_be_event(Chardev *s, int event)
 {
-    CharBackend *be = s->be;
-
-#ifdef HACK_CHARDEV_SYNC
-    qemu_chr_fe_event(be, event);
-#else
-    if (!be || !be->chr_event) {
-        return;
-    }
-
-    be->chr_event(be->opaque, event);
-#endif
+    qemu_chr_fe_event(s->be, event);
 }
 
 void qemu_chr_be_event(Chardev *s, int event)
@@ -215,6 +205,9 @@ static void qemu_char_open(Chardev *chr, ChardevBackend *backend,
     ChardevClass *cc = CHARDEV_GET_CLASS(chr);
     /* Any ChardevCommon member would work */
     ChardevCommon *common = backend ? backend->u.null.data : NULL;
+
+    chr->drop_guest_input = (common && common->has_dropguestinput
+                             && common->dropguestinput);
 
     if (common && common->has_logfile) {
         int flags = O_WRONLY | O_CREAT;
@@ -488,6 +481,9 @@ fail:
 void qemu_chr_parse_common(QemuOpts *opts, ChardevCommon *backend)
 {
     const char *logfile = qemu_opt_get(opts, "logfile");
+
+    backend->has_dropguestinput = true;
+    backend->dropguestinput = qemu_opt_get_bool(opts, "dropguestinput", false);
 
     backend->has_logfile = logfile != NULL;
     backend->logfile = g_strdup(logfile);
@@ -896,6 +892,9 @@ QemuOptsList qemu_chardev_opts = {
             .type = QEMU_OPT_STRING,
         },{
             .name = "append",
+            .type = QEMU_OPT_BOOL,
+        },{
+            .name = "dropguestinput",
             .type = QEMU_OPT_BOOL,
         },{
             .name = "logfile",

@@ -202,7 +202,8 @@
 #
 # Since: 2.6
 ##
-{ 'struct': 'ChardevCommon', 'data': { '*logfile': 'str',
+{ 'struct': 'ChardevCommon', 'data': { '*dropguestinput': 'bool',
+                                       '*logfile': 'str',
                                        '*logappend': 'bool' } }
 
 ##

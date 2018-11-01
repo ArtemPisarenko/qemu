@@ -1,9 +1,6 @@
 #ifndef QEMU_CHAR_H
 #define QEMU_CHAR_H
 
-#define HACK_CHARDEV_SYNC //TODO: merge to global option(sync)
-#define HACK_CHARDEV_FE_DROP_INPUT //TODO: convert to chardev parameter(fe_drop_input)
-
 #include "qapi/qapi-types-char.h"
 #include "qemu/main-loop.h"
 #include "qemu/bitmap.h"
@@ -61,6 +58,7 @@ struct Chardev {
 
     QemuMutex chr_write_lock;
     CharBackend *be;
+    bool drop_guest_input;
     char *label;
     char *filename;
     int logfd;

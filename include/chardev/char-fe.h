@@ -17,13 +17,9 @@ struct CharBackend {
     void *opaque;
     int tag;
     int fe_open;
-#ifdef HACK_CHARDEV_SYNC
-    bool fe_drop_openclose;
-    QEMUBH *fe_deffered_open_bh;
-#endif
-#ifdef HACK_CHARDEV_FE_DROP_INPUT
-    bool fe_drop_input;
-#endif
+    bool mux_context;
+    QEMUTimer *fe_deffered_open_timer;
+    bool is_guest_device;
 };
 
 /**
@@ -48,9 +44,7 @@ bool qemu_chr_fe_init(CharBackend *b, Chardev *s, Error **errp);
  */
 void qemu_chr_fe_deinit(CharBackend *b, bool del);
 
-#ifdef HACK_CHARDEV_SYNC
 void qemu_chr_fe_mark_non_guest_device(CharBackend *b);
-#endif
 
 /**
  * qemu_chr_fe_get_driver:
@@ -184,9 +178,7 @@ void qemu_chr_fe_printf(CharBackend *be, const char *fmt, ...)
 guint qemu_chr_fe_add_watch(CharBackend *be, GIOCondition cond,
                             GIOFunc func, void *user_data);
 
-#ifdef HACK_CHARDEV_SYNC
 void qemu_chr_fe_event(CharBackend *be, int event);
-#endif
 
 /**
  * qemu_chr_fe_write:

@@ -31,7 +31,19 @@
 #include "chardev/char-io.h"
 #include "chardev/char-mux.h"
 
-#ifdef HACK_CHARDEV_SYNC
+static bool fe_openclose_event_is_async(Chardev *s, CharBackend *be)
+{
+    return !(qemu_io_sync && be->is_guest_device);
+}
+
+static bool fe_input_allowed(Chardev *s, CharBackend *be)
+{
+    if (CHARDEV_IS_MUX(s)) {
+        s = MUX_CHARDEV(s)->chr.chr;
+    }
+    return !(s->drop_guest_input && be->is_guest_device);
+}
+
 static void fe_generate_open_event(void *opaque)
 {
 	CharBackend *be = opaque;
@@ -42,72 +54,61 @@ static void fe_generate_open_event(void *opaque)
 
 void qemu_chr_fe_event(CharBackend *be, int event)
 {
-	if (!be || !be->chr_event) {
+	if (!be || !be->chr || !be->chr_event) {
 		return;
 	}
 
-#ifdef HACK_CHARDEV_SYNC
-	if (be->fe_drop_openclose) {
-		switch (event) {
-		case CHR_EVENT_OPENED:
-		case CHR_EVENT_CLOSED:
-			return;
-		default:
-			break;
-		}
+	switch (event) {
+	case CHR_EVENT_OPENED:
+	case CHR_EVENT_CLOSED:
+	    if (!fe_openclose_event_is_async(be->chr, be)) {
+	        return;
+	    }
+	    break;
+	case CHR_EVENT_BREAK:
+	case CHR_EVENT_MUX_IN:
+	case CHR_EVENT_MUX_OUT:
+	    if (!fe_input_allowed(be->chr, be)) {
+	        return;
+	    }
+	    break;
+	default:
+	    break;
 	}
-#endif
-#ifdef HACK_CHARDEV_FE_DROP_INPUT
-	if (be->fe_drop_input) {
-		switch (event) {
-		case CHR_EVENT_BREAK:
-		case CHR_EVENT_MUX_IN:
-		case CHR_EVENT_MUX_OUT:
-			return;
-		default:
-			break;
-		}
-	}
-#endif
 
 	be->chr_event(be->opaque, event);
 }
-#endif /* HACK_CHARDEV_SYNC */
+
+static int qemu_chr_fe_do_write(CharBackend *be, const uint8_t *buf, int len,
+                                bool write_all)
+{
+    Chardev *s = be->chr;
+    int res = !qemu_io_sync ? 0 : len;
+
+    if (!s) {
+        return res;
+    }
+
+    res = qemu_chr_write(s, buf, len, write_all);
+
+    if (qemu_io_sync && (res != len)) {
+        res = len;
+    }
+    return res;
+}
 
 int qemu_chr_fe_write(CharBackend *be, const uint8_t *buf, int len)
 {
-    Chardev *s = be->chr;
-
-    if (!s) {
-        return 0;
-    }
-
-#ifdef HACK_CHARDEV_SYNC //TODO: make conditional
-    return qemu_chr_write(s, buf, len, true);
-#else
-    return qemu_chr_write(s, buf, len, false);
-#endif
+    return qemu_chr_fe_do_write(be, buf, len, qemu_io_sync);
 }
 
 int qemu_chr_fe_write_all(CharBackend *be, const uint8_t *buf, int len)
 {
-    Chardev *s = be->chr;
-
-    if (!s) {
-        return 0;
-    }
-
-    return qemu_chr_write(s, buf, len, true);
+    return qemu_chr_fe_do_write(be, buf, len, true);
 }
 
 int qemu_chr_fe_read_all(CharBackend *be, uint8_t *buf, int len)
 {
-#ifdef HACK_CHARDEV_FE_DROP_INPUT // TODO: refactor and make conditional
-	(void)be;
-	(void)buf;
-	(void)len;
-	return 0;
-#else
     Chardev *s = be->chr;
     int offset = 0;
     int res;
@@ -115,6 +116,9 @@ int qemu_chr_fe_read_all(CharBackend *be, uint8_t *buf, int len)
     if (!s || !CHARDEV_GET_CLASS(s)->chr_sync_read) {
         return 0;
     }
+
+    if (!fe_input_allowed(s, be))
+        return 0;
 
     if (qemu_chr_replay(s) && replay_mode == REPLAY_MODE_PLAY) {
         return replay_char_read_all_load(buf);
@@ -147,7 +151,6 @@ int qemu_chr_fe_read_all(CharBackend *be, uint8_t *buf, int len)
         replay_char_read_all_save_buf(buf, offset);
     }
     return offset;
-#endif /* HACK_CHARDEV_FE_DROP_INPUT */
 }
 
 int qemu_chr_fe_ioctl(CharBackend *be, int cmd, void *arg)
@@ -265,17 +268,13 @@ bool qemu_chr_fe_init(CharBackend *b, Chardev *s, Error **errp)
         }
     }
 
-#ifdef HACK_CHARDEV_SYNC
     b->chr_can_read = NULL;
     b->chr_read = NULL;
     b->chr_event = NULL;
-    b->fe_drop_openclose = false;
-    b->fe_deffered_open_bh = qemu_bh_new(fe_generate_open_event, b);
-#ifdef HACK_CHARDEV_FE_DROP_INPUT //TODO: make conditional
-    b->fe_drop_input = true;
-#endif
-#endif /* HACK_CHARDEV_SYNC */
-
+    b->mux_context = false;
+    b->fe_deffered_open_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL,
+                                             fe_generate_open_event, b);
+    b->is_guest_device = true;
     b->fe_open = false;
     b->tag = tag;
     b->chr = s;
@@ -290,9 +289,8 @@ void qemu_chr_fe_deinit(CharBackend *b, bool del)
 {
     assert(b);
 
-#ifdef HACK_CHARDEV_SYNC
-    qemu_bh_delete(b->fe_deffered_open_bh);
-#endif
+    timer_del(b->fe_deffered_open_timer);
+    timer_free(b->fe_deffered_open_timer);
 
     if (b->chr) {
         qemu_chr_fe_set_handlers(b, NULL, NULL, NULL, NULL, NULL, NULL, true);
@@ -315,29 +313,24 @@ void qemu_chr_fe_deinit(CharBackend *b, bool del)
     }
 }
 
-#ifdef HACK_CHARDEV_SYNC
 void qemu_chr_fe_mark_non_guest_device(CharBackend *b)
 {
     assert(!(b->chr_can_read || b->chr_read));
-#ifdef HACK_CHARDEV_FE_DROP_INPUT //TODO: synchronize with option value assignment
-    b->fe_drop_input = false;
-#endif
+    b->is_guest_device = false;
 }
 
-#ifdef HACK_CHARDEV_FE_DROP_INPUT
-static int fe_drop_char_can_read(void *opaque)
+static int fe_drop_chr_can_read(void *opaque)
 {
 	(void)opaque;
 	return INT_MAX;
 }
+
 static void fe_drop_chr_read(void *opaque, const uint8_t *buf, int size)
 {
 	(void)opaque;
 	(void)buf;
 	(void)size;
 }
-#endif /* HACK_CHARDEV_FE_DROP_INPUT */
-#endif /* HACK_CHARDEV_SYNC */
 
 void qemu_chr_fe_set_handlers(CharBackend *b,
                               IOCanReadHandler *fd_can_read,
@@ -362,24 +355,13 @@ void qemu_chr_fe_set_handlers(CharBackend *b,
     } else {
         fe_open = 1;
     }
-#ifdef HACK_CHARDEV_FE_DROP_INPUT //TODO: refactor and make conditional
-    if (CHARDEV_IS_MUX(s) && b->fe_drop_input) {
-    	if (fd_can_read)
-    		b->chr_can_read = fe_drop_char_can_read;
-    	else
-    		b->chr_can_read = NULL;
-    	if (fd_read)
-    		b->chr_read = fe_drop_chr_read;
-    	else
-    		b->chr_read = NULL;
+    if (fe_input_allowed(s, b) || b->mux_context) {
+        b->chr_can_read = fd_can_read;
+        b->chr_read = fd_read;
     } else {
-    	b->chr_can_read = fd_can_read;
-    	b->chr_read = fd_read;
+        b->chr_can_read = fd_can_read ? fe_drop_chr_can_read : NULL;
+        b->chr_read = fd_read ? fe_drop_chr_read : NULL;
     }
-#else
-    b->chr_can_read = fd_can_read;
-    b->chr_read = fd_read;
-#endif /* HACK_CHARDEV_FE_DROP_INPUT */
     b->chr_event = fd_event;
     b->chr_be_change = be_change;
     b->opaque = opaque;
@@ -392,27 +374,22 @@ void qemu_chr_fe_set_handlers(CharBackend *b,
 
     if (fe_open) {
         qemu_chr_fe_take_focus(b);
-        /* We're connecting to an already opened device, so let's make sure we
-           also get the open event */
-        if (s->be_open) {
+        if (!fe_openclose_event_is_async(s, b) && !b->mux_context) {
+            timer_mod(b->fe_deffered_open_timer,
+                      qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL));
+        } else if (s->be_open) {
+            /* We're connecting to an already opened device, so let's make sure
+               we also get the open event */
             qemu_chr_be_event(s, CHR_EVENT_OPENED);
         }
-#ifdef HACK_CHARDEV_SYNC //TODO: refactor and make conditional
-        else if (CHARDEV_IS_MUX(s)) {
-        	b->fe_drop_openclose = true;
-        	qemu_bh_schedule(b->fe_deffered_open_bh);
-        }
-#endif
+    } else if (!fe_openclose_event_is_async(s, b) && !b->mux_context) {
+    	timer_del(b->fe_deffered_open_timer);
     }
-#ifdef HACK_CHARDEV_SYNC //TODO: refactor and make conditional
-    else if (CHARDEV_IS_MUX(s)) {
-    	b->fe_drop_openclose = false;
-    	qemu_bh_cancel(b->fe_deffered_open_bh);
-    }
-#endif
 
     if (CHARDEV_IS_MUX(s)) {
+        MUX_CHARDEV(s)->chr.mux_context = true;
         mux_chr_set_handlers(s, context);
+        MUX_CHARDEV(s)->chr.mux_context = false;
     }
 }
 
@@ -466,13 +443,6 @@ void qemu_chr_fe_set_open(CharBackend *be, int fe_open)
 guint qemu_chr_fe_add_watch(CharBackend *be, GIOCondition cond,
                             GIOFunc func, void *user_data)
 {
-#ifdef HACK_CHARDEV_FE_DROP_INPUT //TODO: refactor and make conditional
-	(void)be;
-	(void)cond;
-	(void)func;
-	(void)user_data;
-	return 0;
-#else
     Chardev *s = be->chr;
     GSource *src;
     guint tag;
@@ -481,9 +451,12 @@ guint qemu_chr_fe_add_watch(CharBackend *be, GIOCondition cond,
         return 0;
     }
 
-#ifdef HACK_CHARDEV_SYNC //TODO: make conditional
-	cond &= ~(G_IO_OUT);
-#endif
+    if (!fe_input_allowed(s, be))
+        return 0;
+
+    if (qemu_io_sync) {
+        cond &= ~(G_IO_OUT);
+    }
 
     src = CHARDEV_GET_CLASS(s)->chr_add_watch(s, cond);
     if (!src) {
@@ -495,7 +468,6 @@ guint qemu_chr_fe_add_watch(CharBackend *be, GIOCondition cond,
     g_source_unref(src);
 
     return tag;
-#endif /* HACK_CHARDEV_FE_DROP_INPUT */
 }
 
 void qemu_chr_fe_disconnect(CharBackend *be)
