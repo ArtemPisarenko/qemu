@@ -1,0 +1,2 @@
+Although this doesn't trigger any issue/bug (known to me), this may prevent them in future.
+Also this patch optimizes emulation performance by avoiding extra activity and fixes a case, when serial port wasn't closed if backend closed while being disabled (even worse - serial port will open again!).
