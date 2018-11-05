@@ -1,4 +1,0 @@
-This issue actually more complex. Idea of generating events from inside function called '*_set_handlers' isn't good, at least its implicit nature, and especially a fact, that function decides about open state (see 'fe_open' variable), but generates event only in one direction. Combined with 'mux_chr_set_handlers()' hack this makes things even worse.
-Better solution is to change fe interface and rewrite all frontends code (a lot of stuff in hw/char/* and somewhere else).
-Although this patch doesn't fix any issue/bug (known to me), it prevents them in future. Also it optimizes emulation performance by avoiding extra activity.
-I did several trivial tests on x86_64 target and seems like nothing broken.
