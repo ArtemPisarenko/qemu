@@ -27,7 +27,7 @@ typedef struct RngEgd
     char *chr_name;
 } RngEgd;
 
-static void rng_egd_request_entropy(RngBackend *b, RngRequest *req)
+static bool rng_egd_request_entropy(RngBackend *b, RngRequest *req)
 {
     RngEgd *s = RNG_EGD(b);
     size_t size = req->size;
@@ -46,6 +46,8 @@ static void rng_egd_request_entropy(RngBackend *b, RngRequest *req)
 
         size -= len;
     }
+
+    return false;
 }
 
 static int rng_egd_chr_can_read(void *opaque)

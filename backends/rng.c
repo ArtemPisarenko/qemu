@@ -16,6 +16,8 @@
 #include "qapi/qmp/qerror.h"
 #include "qom/object_interfaces.h"
 
+static void rng_backend_free_request(RngRequest *req);
+
 void rng_backend_request_entropy(RngBackend *s, size_t size,
                                  EntropyReceiveFunc *receive_entropy,
                                  void *opaque)
@@ -32,9 +34,11 @@ void rng_backend_request_entropy(RngBackend *s, size_t size,
         req->opaque = opaque;
         req->data = g_malloc(req->size);
 
-        QSIMPLEQ_INSERT_TAIL(&s->requests, req, next);
-
-        k->request_entropy(s, req);
+        if (k->request_entropy(s, req)) {
+            rng_backend_free_request(req);
+        } else {
+            QSIMPLEQ_INSERT_TAIL(&s->requests, req, next);
+        }
     }
 }
 
