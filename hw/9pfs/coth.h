@@ -18,9 +18,9 @@
 #include "qemu/thread.h"
 #include "qemu/coroutine.h"
 #include "qemu/main-loop.h"
+#include "sysemu/sysemu.h"
 #include "9p.h"
 
-#ifndef HACK_9P_FIX_BLOCKING //TODO: refactor and make conditional
 /*
  * we want to use bottom half because we want to make sure the below
  * sequence of events.
@@ -34,25 +34,23 @@
 #define v9fs_co_run_in_worker(code_block)                               \
     do {                                                                \
         QEMUBH *co_bh;                                                  \
-        co_bh = qemu_bh_new(co_run_in_worker_bh,                        \
-                            qemu_coroutine_self());                     \
-        qemu_bh_schedule(co_bh);                                        \
-        /*                                                              \
-         * yield in qemu thread and re-enter back                       \
-         * in worker thread                                             \
-         */                                                             \
-        qemu_coroutine_yield();                                         \
-        qemu_bh_delete(co_bh);                                          \
+        if (!qemu_io_sync) {                                            \
+            co_bh = qemu_bh_new(co_run_in_worker_bh,                    \
+                                qemu_coroutine_self());                 \
+            qemu_bh_schedule(co_bh);                                    \
+            /*                                                          \
+             * yield in qemu thread and re-enter back                   \
+             * in worker thread                                         \
+             */                                                         \
+            qemu_coroutine_yield();                                     \
+            qemu_bh_delete(co_bh);                                      \
+        }                                                               \
         code_block;                                                     \
-        /* re-enter back to qemu thread */                              \
-        qemu_coroutine_yield();                                         \
+        if (!qemu_io_sync) {                                            \
+            /* re-enter back to qemu thread */                          \
+            qemu_coroutine_yield();                                     \
+        }                                                               \
     } while (0)
-#else
-#define v9fs_co_run_in_worker(code_block)                               \
-    do {                                                                \
-        code_block;                                                     \
-    } while (0)
-#endif /* HACK_9P_FIX_BLOCKING */
 
 void co_run_in_worker_bh(void *);
 int coroutine_fn v9fs_co_readlink(V9fsPDU *, V9fsPath *, V9fsString *);

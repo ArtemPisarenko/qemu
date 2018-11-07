@@ -1,8 +1,6 @@
 #ifndef QEMU_9P_H
 #define QEMU_9P_H
 
-#define HACK_9P_FIX_BLOCKING //TODO: merge to global option(sync)
-
 #include <dirent.h>
 #include <utime.h>
 #include <sys/resource.h>
