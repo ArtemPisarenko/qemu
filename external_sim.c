@@ -1,4 +1,5 @@
 #include "qemu/osdep.h"
+#include "qemu/option.h"
 #include "qemu/timer.h"
 #include "sysemu/cpus.h"
 #include "sysemu/kvm.h"
