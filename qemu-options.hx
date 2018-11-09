@@ -4385,14 +4385,6 @@ e.g to launch a SEV guest
 
 ETEXI
 
-DEF("external-sim", 0, QEMU_OPTION_external_sim, \
-    "-external-sim   enable synch with a simulation clock\n", QEMU_ARCH_ALL)
-STEXI
-@item -external-sim
-@findex -external-sim
-Qemu will synchronize its virtual clock with the simulation clock
-in an external program.
-ETEXI
 
 HXCOMM This is the last statement. Insert new options before this line!
 STEXI

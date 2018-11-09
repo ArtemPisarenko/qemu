@@ -42,7 +42,6 @@
 #include "sysemu/balloon.h"
 
 #include "hw/boards.h"
-#include "external_sim.h"
 
 /* This check must be after config-host.h is included */
 #ifdef CONFIG_EVENTFD
@@ -1907,15 +1906,6 @@ int kvm_cpu_exec(CPUState *cpu)
 
     do {
         MemTxAttrs attrs;
-
-        if (external_sim_enabled()) {
-            /* Pause here while synchronizing with a simulation clock.
-             * We do not want to execute instructions past the synchronization
-             * deadline, but it is ok to update the states of other equipment
-             * like timers, i/o devices, etc.
-             */
-            external_sim_sync();
-        }
 
         if (cpu->vcpu_dirty) {
             kvm_arch_put_registers(cpu, KVM_PUT_RUNTIME_STATE);

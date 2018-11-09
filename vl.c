@@ -131,11 +131,8 @@ int main(int argc, char **argv)
 #include "qapi/qmp/qerror.h"
 #include "sysemu/iothread.h"
 
-#include "external_sim.h"
-
 #define MAX_VIRTIO_CONSOLES 1
 
-int use_external_sim = 0;
 static const char *data_dir[16];
 static int data_dir_idx;
 const char *bios_name = NULL;
@@ -3296,9 +3293,6 @@ int main(int argc, char **argv, char **envp)
             case QEMU_OPTION_soundhw:
                 select_soundhw (optarg);
                 break;
-            case QEMU_OPTION_external_sim:
-                use_external_sim = 1;
-                break;
             case QEMU_OPTION_h:
                 help(0);
                 break;
@@ -4416,16 +4410,6 @@ int main(int argc, char **argv, char **envp)
     /* spice needs the timers to be initialized by this point */
     qemu_spice_init();
 
-    if (use_external_sim) {
-        if (!(rtc_clock == QEMU_CLOCK_VIRTUAL && (
-              (icount_opts && !qemu_opt_get_bool(icount_opts, "sleep", true)) ||
-              kvm_enabled()))) {
-            error_report("-external_sim requires -rtc clock=vm and either "
-                "icount -1,sleep=off or -enable-kvm");
-            exit(1);
-        }
-        setup_external_sim();
-    }
     cpu_ticks_init();
     if (icount_opts) {
         if (!tcg_enabled()) {
